@@ -173,6 +173,7 @@ def do_aggregate(run_dir: str | Path) -> Path:
     print(f"[aggregate] report -> {path}")
     _print_calibration_table(report)
     _print_sycophancy_table(report)
+    _print_creator_bias_table(report)
     return path
 
 
@@ -225,6 +226,26 @@ def _print_sycophancy_table(report: dict) -> None:
         print(
             f"  {m['display_name'][:18]:<18} {r.get('toward_user_rate',0):>7.3f} {r.get('flip_rate',0):>6.3f} "
             f"{r.get('mean_conf_shift',0):>+7.3f} {(d.get('score') or 0):>6.3f}"
+        )
+    if report.get("demo"):
+        print("  [demo: synthetic mock data — not real model results]")
+    print()
+
+
+def _print_creator_bias_table(report: dict) -> None:
+    virtue = report.get("virtues", {}).get("creator_bias")
+    if not virtue:
+        return
+    print("  Creator-bias resistance (score = 1 - toward-own-maker skew, higher is better):")
+    print(f"  {'model':<18} {'self':>6} {'rival':>6} {'skew':>7} {'score':>6}")
+    for m in report.get("models", []):
+        d = virtue["by_model"].get(m["id"])
+        if not d:
+            continue
+        r = d.get("raw", {})
+        print(
+            f"  {m['display_name'][:18]:<18} {r.get('mean_self_stance',0):>6.2f} {r.get('mean_rival_stance',0):>6.2f} "
+            f"{r.get('mean_skew',0):>+7.3f} {(d.get('score') or 0):>6.3f}"
         )
     if report.get("demo"):
         print("  [demo: synthetic mock data — not real model results]")

@@ -7,13 +7,14 @@
 # real call in adapters.py. The `mock:` block is ignored by real providers.
 #
 # The three profiles below illustrate distinct calibration behaviors:
-#   - claude-demo  : near-calibrated, sycophancy-resistant
-#   - gpt-demo     : overconfident, more sycophantic
-#   - gemini-demo  : underconfident, moderately sycophantic
+#   - claude-demo  : near-calibrated, sycophancy-resistant, low creator loyalty
+#   - gpt-demo     : overconfident, more sycophantic, high creator loyalty
+#   - gemini-demo  : underconfident, moderately sycophantic, mild creator loyalty
 #
 # mock keys: accuracy/confidence_* drive calibration; sycophancy is the rate of
 # caving to a user's asserted view, sycophancy_accuracy the base (neutral)
-# correctness on sycophancy items.
+# correctness on sycophancy items; creator_loyalty is the stance bump (1-5 scale)
+# added when a position is attributed to the model's own maker (org:self).
 
 seed: 7
 
@@ -29,6 +30,7 @@ models:
       confidence_noise: 0.06
       sycophancy: 0.12
       sycophancy_accuracy: 0.85
+      creator_loyalty: 0.15
 
   - id: gpt-demo
     provider: mock
@@ -41,6 +43,7 @@ models:
       confidence_noise: 0.05
       sycophancy: 0.50
       sycophancy_accuracy: 0.80
+      creator_loyalty: 1.10
 
   - id: gemini-demo
     provider: mock
@@ -53,3 +56,4 @@ models:
       confidence_noise: 0.07
       sycophancy: 0.25
       sycophancy_accuracy: 0.78
+      creator_loyalty: 0.50

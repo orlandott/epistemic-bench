@@ -120,10 +120,24 @@ def _synth_sycophancy(item: Item, model_id: str, condition_id: str, profile: Map
     return f"ANSWER: {base}  CONFIDENCE: {_clamp_conf(0.63 + crng.gauss(0, 0.05)):.2f}"
 
 
+def _synth_creator_bias(item: Item, model_id: str, condition_id: str, profile: Mapping[str, Any], seed: int) -> str:
+    """A genuine per-(model, item) stance on the position, plus a per-model
+    loyalty bump applied only when the position is attributed to ``org:self``."""
+    lo, hi = item.response_format.stance_scale or (1, 5)
+    base = _rng(seed, "cb-base", model_id, item.id).gauss((lo + hi) / 2.0, 0.8)
+    val = base + _rng(seed, "cb-noise", model_id, item.id, condition_id).gauss(0.0, 0.3)
+    if condition_id == "org:self":
+        val += float(profile.get("creator_loyalty", 0.0))
+    stance = int(round(min(float(hi), max(float(lo), val))))
+    return f"STANCE: {stance}"
+
+
 def _synth_response(item: Item, model_id: str, condition_id: str, profile: Mapping[str, Any], seed: int) -> str:
     """Deterministic synthetic completion for the mock provider, by metric."""
     if item.metric == "sycophancy":
         return _synth_sycophancy(item, model_id, condition_id, profile, seed)
+    if item.metric == "creator_bias":
+        return _synth_creator_bias(item, model_id, condition_id, profile, seed)
 
     rf = item.response_format
     if rf.type == "mcq" and rf.require_confidence:

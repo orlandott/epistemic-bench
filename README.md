@@ -14,7 +14,7 @@ milestone (**calibration, end to end**) plus scaffolding and stubs for the rest.
 |---|---|---|
 | Calibration | v1 | ✅ implemented (scorer + ECE/Brier aggregation + leaderboard) |
 | Sycophancy resistance | v1 | ✅ implemented (grouped neutral/primed scorer + flip-rate aggregation + leaderboard) |
-| Creator-bias / loyalty | v1 | 🧩 stub (runner org-role binding implemented) |
+| Creator-bias / loyalty | v1 | ✅ implemented (org-role flip test: self-vs-rival stance skew + aggregation) |
 | Framing consistency | v1 | 🧩 stub |
 | Clarity (programmatic) | v1 | 🧩 stub |
 | Pedantic precision, Thoroughness | v2 | 🧩 stub, judge-gated (SPEC §10) |
