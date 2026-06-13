@@ -456,10 +456,14 @@ _STATUS_PILL = {
 def _aggregate_section(report: dict) -> str:
     """Headline scorecard (SPEC §8.3 deviation, on request): one figure per model.
 
-    The overall is the *unweighted* mean of that model's published per-virtue
-    indices (live virtues only); models are ranked by it, with the full per-virtue
+    The overall is the *unweighted* mean of the published per-virtue indices over
+    the full set of live virtues; models are ranked by it, with the per-virtue
     matrix shown alongside so the average never travels without its breakdown.
     Every index here is higher-is-better, so a higher number is always better.
+
+    Every model is expected to be scored on every live virtue. A model missing any
+    is shown as incomplete (no overall, sorted last) rather than averaged over a
+    smaller set, which would flatter it — the gap is surfaced, not hidden.
     """
     live = [v for v in VIRTUES if _is_live(report, v["key"])]
     if not live:
@@ -474,48 +478,70 @@ def _aggregate_section(report: dict) -> str:
             s = d.get("score") if d else None
             if s is not None:
                 sc[v["key"]] = float(s)
-        if sc:
-            entries.append((m, sc, sum(sc.values()) / len(sc)))
+        if not sc:
+            continue
+        complete = len(sc) == len(live)
+        overall = sum(sc.values()) / len(live) if complete else None
+        entries.append((m, sc, complete, overall))
     if not entries:
         return ""
-    entries.sort(key=lambda e: e[2], reverse=True)
+    # complete models ranked by overall (desc); incomplete models last.
+    entries.sort(key=lambda e: (e[2], e[3] if e[3] is not None else -1.0), reverse=True)
 
     head_cells = "".join(
         f'<th class="num" title="{_esc(v["title"])}">{_esc(v["short"])}</th>' for v in live
     )
-    rows = []
-    for rank, (m, sc, overall) in enumerate(entries, start=1):
-        top = " top" if rank == 1 else ""
+    rows, rank, any_incomplete = [], 0, False
+    for m, sc, complete, overall in entries:
         cells = "".join(
             f'<td class="num">{round(sc[v["key"]] * 100) if v["key"] in sc else "—"}</td>'
             for v in live
         )
+        if complete:
+            rank += 1
+            top = " top" if rank == 1 else ""
+            rank_cell = f'<td class="rank">{rank}</td>'
+            overall_cell = f'<td class="num overall-col"><span class="big">{round(overall * 100)}</span></td>'
+        else:
+            any_incomplete = True
+            top = " incomplete"
+            rank_cell = '<td class="rank">—</td>'
+            overall_cell = (
+                '<td class="num overall-col" title="not scored on every measure">'
+                '<span class="big">—</span></td>'
+            )
         rows.append(
             f'<tr class="row{top}">'
-            f'<td class="rank">{rank}</td>'
+            f"{rank_cell}"
             f'<td class="model-cell">{_esc(m["display_name"])}</td>'
             f'<td class="maker-cell">{_esc(m.get("maker", ""))}</td>'
             f"{cells}"
-            f'<td class="num overall-col"><span class="big">{round(overall * 100)}</span></td>'
+            f"{overall_cell}"
             "</tr>"
         )
 
     n = len(live)
+    foot = (
+        '<p class="footnote">Models not yet scored on every measure show no overall and are listed '
+        "last; the average is taken over all measures, never a partial set.</p>"
+        if any_incomplete
+        else ""
+    )
     return (
         '<section class="overall">'
         '<p class="kicker">At a glance &middot; Overall</p>'
         "<h2>How the models compare overall</h2>"
-        '<p class="lede">A single figure per model: the unweighted average of the per-virtue '
-        f"indices beside it ({n} measured so far), every one scored 0–100 with higher being "
-        "better. We weight no virtue above another — and an average can hide a real weakness "
-        "behind otherwise strong marks, so read it as a starting point and let the detail below "
-        "settle any close call.</p>"
+        '<p class="lede">A single figure per model: the unweighted average across all '
+        f"{n} measures beside it, every one scored 0–100 with higher being better. We weight no "
+        "virtue above another — and an average can hide a real weakness behind otherwise strong "
+        "marks, so read it as a starting point and let the detail below settle any close call.</p>"
         '<div class="tablewrap"><table class="board"><thead><tr>'
         "<th>#</th><th>Model</th><th>Developer</th>"
         f"{head_cells}"
         "<th class='num overall-col'>Overall<br><span class='unit'>index, 0–100</span></th>"
         "</tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>"
+        f"{foot}"
         "</section>"
     )
 
@@ -900,6 +926,8 @@ table.board{border-collapse:collapse;width:100%;font-family:var(--sans);font-siz
 .board th.overall-col,.board td.overall-col{background:var(--wash-warm);
   border-left:1px solid var(--rule-strong);}
 .board tr.top td.overall-col{background:var(--ember-pale);}
+.board tr.incomplete td{color:var(--ink-faint);}
+.board tr.incomplete .model-cell{color:var(--ink-soft);}
 .rank{font-family:var(--serif);font-weight:700;font-size:21px;color:var(--ink-faint);width:1%;}
 .board tr.top .rank{color:var(--ember);}
 .model-cell{font-family:var(--serif);font-size:17px;font-weight:700;}
