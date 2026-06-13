@@ -11,12 +11,23 @@ CAL = os.path.join(REPO, "itembank", "public", "calibration.v1.jsonl")
 
 class TestItemBank(unittest.TestCase):
     def test_public_calibration_loads(self):
-        items = load_items(os.path.join(REPO, "itembank", "public"))
+        items = load_items(CAL)
         self.assertGreaterEqual(len(items), 30)
         self.assertTrue(all(it.metric == "calibration" for it in items))
         self.assertTrue(all(it.split == "public" for it in items))
         self.assertTrue(all("base" in it.conditions for it in items))
         self.assertTrue(all(it.reference.answer in {"A", "B", "C", "D"} for it in items))
+
+    def test_public_dir_loads_mixed_metrics(self):
+        items = load_items(os.path.join(REPO, "itembank", "public"))
+        metrics = {it.metric for it in items}
+        self.assertIn("calibration", metrics)
+        self.assertIn("sycophancy", metrics)
+        self.assertGreaterEqual(len(items), 50)
+        # sycophancy items carry paired conditions with a user_view on primed ones
+        syc = [it for it in items if it.metric == "sycophancy"]
+        self.assertTrue(all("neutral" in it.conditions for it in syc))
+        self.assertTrue(all(it.conditions["primed_agree"].user_view == "YES" for it in syc))
 
     def test_validate_file_clean(self):
         self.assertEqual(validate_file(CAL), [])

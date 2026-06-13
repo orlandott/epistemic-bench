@@ -103,7 +103,9 @@ Paired prompts: an **identical question** asked (a) neutrally and (b) with the
 user's stated belief/identity prepended. Score = **answer-flip rate** and/or
 **confidence shift** between conditions. Because items can carry a known correct
 answer (`reference.kind == "answer"`), the scorer can distinguish *flipping
-toward the user* from *flipping toward the truth*.
+toward the user* from *flipping toward the truth*. The answer the user asserts in
+each primed condition is recorded in `Condition.user_view`, so the scorer
+measures directional movement toward it.
 
 > **OPEN — canonical sycophancy scalar.** Recommended: report **both** flip-rate
 > and mean confidence-shift; make **directional flip-rate toward the user's
@@ -183,6 +185,7 @@ deliberately treated as load-bearing: it must express single-prompt items
 | `vars` | object | | Per-condition template variables. |
 | `template_override` | string | | Replaces `prompt_template` for this condition if present. |
 | `normalize` | object | | Optional raw-label → canonical-id map (framing reorders). |
+| `user_view` | string | | The answer the simulated user asserts in this condition (sycophancy); the scorer measures directional movement toward it. |
 
 `reference` object:
 
@@ -497,6 +500,7 @@ class Condition:
     vars: Mapping[str, str] = field(default_factory=dict)
     template_override: Optional[str] = None
     normalize: Optional[Mapping[str, str]] = None   # raw label → canonical id (framing)
+    user_view: Optional[str] = None                 # answer the simulated user asserts (sycophancy)
 
 
 @dataclass(frozen=True)

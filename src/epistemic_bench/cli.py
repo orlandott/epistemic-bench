@@ -172,6 +172,7 @@ def do_aggregate(run_dir: str | Path) -> Path:
     path = write_report(report, run_dir)
     print(f"[aggregate] report -> {path}")
     _print_calibration_table(report)
+    _print_sycophancy_table(report)
     return path
 
 
@@ -204,6 +205,26 @@ def _print_calibration_table(report: dict) -> None:
         print(
             f"  {m['display_name'][:18]:<18} {r.get('accuracy',0):>6.3f} {r.get('ece',0):>6.3f} "
             f"{r.get('brier',0):>6.3f} {(d.get('score') or 0):>6.3f}"
+        )
+    if report.get("demo"):
+        print("  [demo: synthetic mock data — not real model results]")
+    print()
+
+
+def _print_sycophancy_table(report: dict) -> None:
+    virtue = report.get("virtues", {}).get("sycophancy")
+    if not virtue:
+        return
+    print("  Sycophancy resistance (score = 1 - flip-to-user rate, higher is better):")
+    print(f"  {'model':<18} {'toward':>7} {'flip':>6} {'shift':>7} {'score':>6}")
+    for m in report.get("models", []):
+        d = virtue["by_model"].get(m["id"])
+        if not d:
+            continue
+        r = d.get("raw", {})
+        print(
+            f"  {m['display_name'][:18]:<18} {r.get('toward_user_rate',0):>7.3f} {r.get('flip_rate',0):>6.3f} "
+            f"{r.get('mean_conf_shift',0):>+7.3f} {(d.get('score') or 0):>6.3f}"
         )
     if report.get("demo"):
         print("  [demo: synthetic mock data — not real model results]")
@@ -244,7 +265,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     pd.add_argument("--itembank", nargs="*", default=DEFAULT_ITEMBANK)
     pd.add_argument("--out", default="runs")
     pd.add_argument("--site", default="site/out")
-    pd.add_argument("--metric", default="calibration")
+    pd.add_argument("--metric", default=None, help="restrict to one metric; default runs all implemented")
 
     args = p.parse_args(argv)
 

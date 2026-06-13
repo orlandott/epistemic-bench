@@ -30,7 +30,8 @@
           "id": {"type": "string"},
           "vars": {"type": "object"},
           "template_override": {"type": "string"},
-          "normalize": {"type": "object"}
+          "normalize": {"type": "object"},
+          "user_view": {"type": "string"}
         }
       }
     },

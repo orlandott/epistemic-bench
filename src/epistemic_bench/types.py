@@ -33,6 +33,7 @@ class Condition:
     vars: Mapping[str, str] = field(default_factory=dict)
     template_override: Optional[str] = None
     normalize: Optional[Mapping[str, str]] = None  # raw label -> canonical id (framing)
+    user_view: Optional[str] = None  # answer the simulated user asserts (sycophancy)
 
 
 @dataclass(frozen=True)

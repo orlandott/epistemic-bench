@@ -138,6 +138,48 @@ def _calibration_section(report: dict) -> str:
     )
 
 
+def _title(name: str) -> str:
+    return name.replace("_", " ").title()
+
+
+def _generic_virtue_section(virtue: dict, models: list) -> str:
+    """Render any scored virtue as a table: Model | Maker | Score | raw cols | n."""
+    by_model = virtue["by_model"]
+    cols: set[str] = set()
+    for m in models:
+        d = by_model.get(m["id"])
+        if d:
+            cols |= set(d.get("raw", {}).keys())
+    cols.discard("n_items")
+    col_order = sorted(cols)
+
+    head = (
+        "<tr><th>Model</th><th>Maker</th><th class='num'>Score</th>"
+        + "".join(f"<th class='num'>{_esc(c.replace('_', ' '))}</th>" for c in col_order)
+        + "<th class='num'>n</th></tr>"
+    )
+    rows = []
+    for m in models:
+        d = by_model.get(m["id"])
+        if not d:
+            continue
+        raw = d.get("raw", {})
+        ci = d.get("ci")
+        ci_txt = f' <span style="color:#94a3b8">({_fmt(ci[0],2)}–{_fmt(ci[1],2)})</span>' if ci else ""
+        rows.append(
+            "<tr>"
+            f"<td>{_esc(m['display_name'])}</td><td>{_esc(m.get('maker',''))}</td>"
+            f"<td class='num'><b>{_fmt(d.get('score'),3)}</b>{ci_txt}</td>"
+            + "".join(f"<td class='num'>{_fmt(raw.get(c),3)}</td>" for c in col_order)
+            + f"<td class='num'>{int(raw.get('n_items',0))}</td></tr>"
+        )
+    definition = virtue.get("definition", "")
+    return (
+        f'<p class="note">{_esc(definition)}.</p>'
+        "<table><thead>" + head + "</thead><tbody>" + "".join(rows) + "</tbody></table>"
+    )
+
+
 def build_site(report_path: Path | str, out_dir: Path | str) -> Path:
     report = read_json(report_path)
     out = Path(out_dir)
@@ -158,6 +200,21 @@ def build_site(report_path: Path | str, out_dir: Path | str) -> Path:
         for m in report.get("models", [])
     )
 
+    models = report.get("models", [])
+    virtues = report.get("virtues", {})
+    # Other scored virtues (anything beyond calibration with a non-null score).
+    other_sections = []
+    implemented = {"calibration"}
+    for name, virtue in virtues.items():
+        if name == "calibration":
+            continue
+        if any(d.get("score") is not None for d in virtue.get("by_model", {}).values()):
+            implemented.add(name)
+            other_sections.append(f"<h2>{_esc(_title(name))}</h2>{_generic_virtue_section(virtue, models)}")
+    other_html = "".join(other_sections)
+    remaining = [v for v in ("creator_bias", "framing", "clarity") if v not in implemented]
+    remaining_txt = ", ".join(_title(v) for v in remaining) or "—"
+
     body = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -169,8 +226,9 @@ def build_site(report_path: Path | str, out_dir: Path | str) -> Path:
 {banner}
 <h2>Calibration</h2>
 {_calibration_section(report)}
-<p class="legend">Other virtues (sycophancy resistance, creator-bias, framing consistency, clarity) are
-specified in <code>SPEC.md</code> and scaffolded as stubs; they will appear here once implemented.</p>
+{other_html}
+<p class="legend">Remaining virtues ({_esc(remaining_txt)}) are specified in <code>SPEC.md</code> and
+scaffolded as stubs; they will appear here once implemented.</p>
 <footer>
 <div>{report.get('note','')}</div>
 <div style="margin-top:6px">Run <code>{_esc(run.get('run_id','?'))}</code> ·
