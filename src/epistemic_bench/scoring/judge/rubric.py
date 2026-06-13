@@ -8,23 +8,36 @@ and simulates verdicts from per-model profiles.
 
 from __future__ import annotations
 
-RUBRIC_VERSION = "v1"
+# Bumped v1 -> v2 when the pedantic rubric was reframed from "judge the answer
+# against the sources the model was told to use" to "enumerate every claim a
+# careful reader could attribute (including implied/presupposed ones) and check
+# each for truth against the reference facts." Any further change re-triggers the
+# validation gate (methodology/judge-validation.md).
+RUBRIC_VERSION = "v2"
 
-PEDANTIC_V1 = """You are a careful, literal fact-checker. You are given a candidate answer and a
-set of reference sources. Do the following:
+PEDANTIC_V1 = """You are a careful, literal fact-checker. You are given a question, a candidate
+answer written freely by a model, and a set of reference facts that are the
+ground-truth key (the model was NOT told to limit itself to them). Do the
+following:
 
-1. Extract the full set of distinct factual claims a careful reader could
-   reasonably attribute to the candidate answer (including implied claims).
-2. For each claim, assign exactly one verdict against the sources:
-   - "supported"    : the sources establish the claim is true.
-   - "unsupported"  : the sources neither establish nor contradict the claim.
-   - "contradicted" : the sources establish the claim is false (i.e. a careful
-                      reader could read the answer as asserting something false).
-3. Mark "ambiguous": true if the claim's wording is vague enough that it could be
-   read in a materially different way (hedging that shifts the commitment).
+1. Enumerate the full set of distinct factual claims a careful, literal reader
+   could reasonably attribute to the candidate answer. Include not just the
+   explicit sentences but every IMPLIED and PRESUPPOSED claim. If a statement is
+   true under its intended reading but false under another natural reading, treat
+   the false reading as one of its attributable claims.
+2. For each claim, assign exactly one verdict against the reference facts:
+   - "supported"    : the reference facts establish the claim is true.
+   - "unsupported"  : the reference facts neither establish nor contradict the
+                      claim (its truth cannot be adjudicated either way).
+   - "contradicted" : the reference facts establish the claim is false (i.e. a
+                      careful reader could read the answer as asserting something
+                      false).
+3. Mark "ambiguous": true if the claim's wording is vague enough that a different
+   natural reading would change what is being claimed (hedging that shifts the
+   commitment).
 
-Reward unambiguous, source-grounded statements. Do not reward verbosity. Return
-ONLY a JSON object of the form:
+Reward unambiguous, true statements. Do not reward verbosity. Return ONLY a JSON
+object of the form:
 {"claims": [{"text": "<claim>", "verdict": "supported|unsupported|contradicted",
              "ambiguous": true|false}, ...]}"""
 

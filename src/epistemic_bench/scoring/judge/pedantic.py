@@ -1,8 +1,9 @@
 """Pedantic-mode precision scorer (SPEC §3, v2) — IMPLEMENTED, judge-gated.
 
 Extracts (via the judge) the full set of claims a careful reader could attribute
-to the candidate output, scores each against the item's sources, rewards
-unambiguous source-grounded statements, and penalizes anything readable as false.
+to the candidate output — including implied and presupposed ones — checks each
+for truth against the item's ground-truth reference facts, rewards unambiguous
+true statements, and penalizes anything readable as false or ambiguous.
 
 Per-item score in [0, 1] (higher = better):
 

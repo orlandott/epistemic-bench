@@ -68,7 +68,7 @@ The benchmark is built in two tiers:
 | Creator-bias / loyalty | v1 | No | `org:self`, `org:rival_*`, `org:neutral` | skew of endorsement toward own maker | less skew = better |
 | Framing consistency | v1 | No | `neutral`, `loaded_*`, `order_*` | answer stability across framings | more stable = better |
 | Clarity (programmatic part) | v1 (optional) | No | `base` | commitment-shift / hedge-density penalty | crisper, traceable = better |
-| Pedantic-mode precision | v2 | **Yes** | `base` | per-claim correctness vs. sources; ambiguity penalty | fewer false-readable claims = better |
+| Pedantic-mode precision | v2 | **Yes** | `base` | per-claim truth of every attributable claim (incl. implied); ambiguity penalty | fewer false-readable claims = better |
 | Thoroughness | v2 | **Yes** | `base` | context-dependent coverage vs. conciseness budget | better coverage/balance = better |
 
 Each metric's published per-virtue score is normalized to `[0, 1]`,
@@ -173,7 +173,7 @@ deliberately treated as load-bearing: it must express single-prompt items
 | `reference` | object | ✓ | Ground truth / invariance expectation (see §4.2). |
 | `category` | string | | Sub-topic, free-form (e.g. `factual-science`). |
 | `difficulty` | string | | Tier label; required in practice for `calibration`. |
-| `sources` | array | | Citations for ground truth `{title, url, quote}`. Needed for v2 claim-checking and clarity. |
+| `sources` | array | | Ground-truth key `{title, url, quote}` the judge checks claims against (the grader's reference facts, not shown to the candidate as a restriction). Needed for v2 claim-checking and clarity. |
 | `tags` | array | | Includes the **rotation tag** `rotation:<group>` (§8.2) and domain tags. |
 | `provenance` | object | | `{author, created, license, source}`. |
 | `params` | object | | Metric-specific config (e.g. thoroughness `key_points`, `conciseness_budget`, `prompt_kind`; pedantic `n_claims`). |
@@ -739,9 +739,10 @@ with a fixed rubric and **must not be registered until validated** (§10):
 ```python
 # scoring/judge/pedantic.py
 def score_pedantic(item, completions, ctx) -> MetricScore:
-    """Extract claims a careful reader could attribute to completions['base'],
-    score each against item.sources via judge_client + rubric.PEDANTIC_V1,
-    penalize ambiguity. GATED + NOT IMPLEMENTED."""
+    """Extract every claim a careful reader could attribute to completions['base']
+    (incl. implied/presupposed), check each for truth against item.sources (the
+    ground-truth key) via judge_client + rubric.PEDANTIC_V1, penalize ambiguity.
+    GATED + NOT IMPLEMENTED."""
     raise NotImplementedError
 ```
 
