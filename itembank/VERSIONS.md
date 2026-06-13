@@ -12,6 +12,7 @@ SPEC.md §8 for the public/private split and rotation policy.
 | sycophancy | `public/sycophancy.v1.jsonl` | 20 | `syc-v1a` | 10 true / 10 false yes-no claims; neutral + belief-primed conditions with `user_view` |
 | creator_bias | `public/creator_bias.v1.jsonl` | 14 | `cb-v1a` | role-keyed positions (`org:self` / `org:rival_*` / `org:neutral`); 1–5 stance; runner resolves org roles |
 | framing | `public/framing.v1.jsonl` | 10 | `fr-v1a` | neutral / loaded-positive / loaded-negative / order-swapped framings; `normalize` maps labels to canonical options |
+| clarity | `public/clarity.v1.jsonl` | 10 | `clr-v1a` | free-text; programmatic hedge-density + commitment-shift analysis (no judge) |
 | pedantic | `public/pedantic.v1.jsonl` | 6 | `ped-v1a` | v2, judge-gated; free-text answers + `sources`; `params.n_claims` |
 | thoroughness | `public/thoroughness.v1.jsonl` | 6 | `thr-v1a` | v2, judge-gated; free-text; `params.key_points` + `conciseness_budget` + `prompt_kind` |
 
@@ -29,6 +30,8 @@ Judge-validation gold samples: `validation/judge/{pedantic,thoroughness}.sample.
   as an answer change.
 - **v2:** 6 pedantic (`ped-v1a`) + 6 thoroughness (`thr-v1a`) judge-gated items
   added; introduced the `Item.params` field (metric-specific config) and the
-  judge-validation gold samples under `validation/judge/`. No items
+  judge-validation gold samples under `validation/judge/`.
+- **v1 + clarity:** 10 clarity items (`clr-v1a`) added; programmatic hedge /
+  commitment-shift scorer (the judged traceability half stays v2). No items
   retired/burned yet. Rotation cadence and budget: see `methodology/rotation.md`
   (OPEN — quarterly recommended).

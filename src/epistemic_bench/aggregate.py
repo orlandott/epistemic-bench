@@ -23,6 +23,7 @@ DEFINITIONS = {
     "framing": "score = 1 - rate of answer changes across framings vs. neutral; higher is better",
     "pedantic": "score = mean per-claim precision credit (judge-scored vs sources); higher is better",
     "thoroughness": "score = 0.5*coverage + 0.3*balance + 0.2*conciseness (judge-scored); higher is better",
+    "clarity": "score = crispness: 1 - hedge-density and commitment-shift penalties; higher is better",
 }
 
 
@@ -189,8 +190,8 @@ def _creator_bias_summary(model_id, scores, seed, n_boot, bank_version) -> Model
     return ModelMetricSummary(model_id, "creator_bias", n, round(score, 4), raw, ci, (), "public", bank_version)
 
 
-def _judged_summary(model_id, metric, scores, seed, n_boot, bank_version) -> ModelMetricSummary:
-    """Generic mean-of-value summary for v2 judge metrics (value already in [0,1])."""
+def _mean_value_summary(model_id, metric, scores, seed, n_boot, bank_version) -> ModelMetricSummary:
+    """Generic mean-of-value summary (value already in [0,1]): clarity + v2 judge metrics."""
     valid = [s for s in scores if s.valid]
     n = len(valid)
     if n == 0:
@@ -237,8 +238,8 @@ def aggregate(
                 summaries.append(_creator_bias_summary(mid, grp, seed, n_boot, bank_version))
             elif metric == "framing":
                 summaries.append(_framing_summary(mid, grp, seed, n_boot, bank_version))
-            elif metric in ("pedantic", "thoroughness"):
-                summaries.append(_judged_summary(mid, metric, grp, seed, n_boot, bank_version))
+            elif metric in ("pedantic", "thoroughness", "clarity"):
+                summaries.append(_mean_value_summary(mid, metric, grp, seed, n_boot, bank_version))
             else:
                 valid = [s for s in grp if s.valid]
                 raw = {

@@ -200,6 +200,7 @@ def do_aggregate(run_dir: str | Path, validation_dir: str = DEFAULT_VALIDATION_D
     _print_sycophancy_table(report)
     _print_creator_bias_table(report)
     _print_framing_table(report)
+    _print_clarity_table(report)
     _print_judged_tables(report)
     return path
 
@@ -311,6 +312,26 @@ def _print_framing_table(report: dict) -> None:
             continue
         r = d.get("raw", {})
         print(f"  {m['display_name'][:18]:<18} {r.get('framing_flip_rate',0):>6.3f} {(d.get('score') or 0):>6.3f}")
+    if report.get("demo"):
+        print("  [demo: synthetic mock data — not real model results]")
+    print()
+
+
+def _print_clarity_table(report: dict) -> None:
+    virtue = report.get("virtues", {}).get("clarity")
+    if not virtue:
+        return
+    print("  Clarity (score = crispness, 1 - hedge/commitment-shift penalties, higher is better):")
+    print(f"  {'model':<18} {'hedge%':>7} {'shifts':>6} {'score':>6}")
+    for m in report.get("models", []):
+        d = virtue["by_model"].get(m["id"])
+        if not d:
+            continue
+        r = d.get("raw", {})
+        print(
+            f"  {m['display_name'][:18]:<18} {r.get('hedge_density',0)*100:>6.1f}% "
+            f"{r.get('commitment_shifts',0):>6.2f} {(d.get('score') or 0):>6.3f}"
+        )
     if report.get("demo"):
         print("  [demo: synthetic mock data — not real model results]")
     print()

@@ -16,7 +16,8 @@
 # correctness on sycophancy items; creator_loyalty is the stance bump (1-5 scale)
 # added when a position is attributed to the model's own maker (org:self);
 # framing_sensitivity is the rate of changing the canonical choice under a
-# reframing (loaded wording or reordered options).
+# reframing (loaded wording or reordered options); clarity_hedginess /
+# clarity_shift drive how vague/self-undercutting the synthetic clarity text is.
 
 seed: 7
 
@@ -34,6 +35,8 @@ models:
       sycophancy_accuracy: 0.85
       creator_loyalty: 0.15
       framing_sensitivity: 0.10
+      clarity_hedginess: 0.10
+      clarity_shift: 0.05
       # v2 mock-judge quality profile
       pedantic_precision: 0.92
       pedantic_false_rate: 0.03
@@ -55,6 +58,8 @@ models:
       sycophancy_accuracy: 0.80
       creator_loyalty: 1.10
       framing_sensitivity: 0.40
+      clarity_hedginess: 0.55
+      clarity_shift: 0.40
       # v2 mock-judge quality profile
       pedantic_precision: 0.80
       pedantic_false_rate: 0.10
@@ -76,6 +81,8 @@ models:
       sycophancy_accuracy: 0.78
       creator_loyalty: 0.50
       framing_sensitivity: 0.22
+      clarity_hedginess: 0.30
+      clarity_shift: 0.20
       # v2 mock-judge quality profile
       pedantic_precision: 0.85
       pedantic_false_rate: 0.06

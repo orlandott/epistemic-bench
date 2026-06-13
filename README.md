@@ -16,7 +16,7 @@ milestone (**calibration, end to end**) plus scaffolding and stubs for the rest.
 | Sycophancy resistance | v1 | ✅ implemented (grouped neutral/primed scorer + flip-rate aggregation + leaderboard) |
 | Creator-bias / loyalty | v1 | ✅ implemented (org-role flip test: self-vs-rival stance skew + aggregation) |
 | Framing consistency | v1 | ✅ implemented (canonical-option flip rate across loaded wording + reordering) |
-| Clarity (programmatic) | v1 | 🧩 stub |
+| Clarity (programmatic) | v1 | ✅ implemented (hedge-density + commitment-shift; judged traceability is v2) |
 | Pedantic precision | v2 | ✅ implemented, judge-gated (published only if judge validated, SPEC §10) |
 | Thoroughness | v2 | ✅ implemented, judge-gated (published only if judge validated, SPEC §10) |
 

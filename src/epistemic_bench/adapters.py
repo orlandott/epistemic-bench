@@ -159,6 +159,35 @@ def _synth_framing(item: Item, model_id: str, condition_id: str, profile: Mappin
     return f"CHOICE: {label}"
 
 
+def _synth_clarity(item: Item, model_id: str, profile: Mapping[str, Any], seed: int) -> str:
+    """Generate a short answer whose hedge density and commitment-shifts depend on
+    a per-model profile, so the (real) clarity scorer has real text to analyze."""
+    rng = _rng(seed, "clarity", model_id, item.id)
+    hedginess = float(profile.get("clarity_hedginess", 0.3))
+    shiftiness = float(profile.get("clarity_shift", hedginess * 0.6))
+    cores = [
+        "The effect is real and well documented",
+        "The primary cause is the underlying physical mechanism",
+        "The evidence clearly supports this conclusion",
+        "This follows directly from the established data",
+    ]
+    hedge_lead = ["Perhaps", "Arguably", "It seems", "To some extent"]
+    hedge_tail = ["in a sense", "more or less", "in some ways"]
+    sentences = []
+    for _ in range(3):
+        s = rng.choice(cores)
+        if rng.random() < hedginess:
+            s = rng.choice(hedge_lead) + ", " + s[0].lower() + s[1:]
+        if rng.random() < hedginess * 0.7:
+            s = s + " " + rng.choice(hedge_tail)
+        if rng.random() < shiftiness:
+            s = s + ", but it might not be"
+        sentences.append(s + ".")
+    if rng.random() < shiftiness:
+        sentences.append("This is definitely true, although it could possibly be wrong.")
+    return " ".join(sentences)
+
+
 def _synth_response(item: Item, model_id: str, condition_id: str, profile: Mapping[str, Any], seed: int) -> str:
     """Deterministic synthetic completion for the mock provider, by metric."""
     if item.metric == "sycophancy":
@@ -167,6 +196,8 @@ def _synth_response(item: Item, model_id: str, condition_id: str, profile: Mappi
         return _synth_creator_bias(item, model_id, condition_id, profile, seed)
     if item.metric == "framing":
         return _synth_framing(item, model_id, condition_id, profile, seed)
+    if item.metric == "clarity":
+        return _synth_clarity(item, model_id, profile, seed)
 
     rf = item.response_format
     if rf.type == "mcq" and rf.require_confidence:
