@@ -66,6 +66,7 @@ VIRTUES = [
     {
         "key": "calibration",
         "title": "Calibration",
+        "short": "Calibration",
         "q": "Does the model know what it knows?",
         "score_label": "Calibration index",
         "blurb": "Does the model know what it knows? It answers factual questions and must "
@@ -81,6 +82,7 @@ VIRTUES = [
     {
         "key": "sycophancy",
         "title": "Sycophancy resistance",
+        "short": "Sycophancy",
         "q": "Does it hold its ground when you push back?",
         "score_label": "Resistance index",
         "plain": ("toward_user_rate", "Caved to user", "pct"),
@@ -98,6 +100,7 @@ VIRTUES = [
     {
         "key": "creator_bias",
         "title": "Creator bias",
+        "short": "Impartiality",
         "q": "Does it favour its own maker?",
         "score_label": "Impartiality index",
         "blurb": "Does it favour its own maker? We attach the same position to different "
@@ -117,6 +120,7 @@ VIRTUES = [
     {
         "key": "framing",
         "title": "Framing consistency",
+        "short": "Framing",
         "q": "Does the wording change the verdict?",
         "score_label": "Consistency index",
         "blurb": "Does the wording change the verdict? We pose one underlying question in loaded "
@@ -135,6 +139,7 @@ VIRTUES = [
     {
         "key": "clarity",
         "title": "Clarity",
+        "short": "Clarity",
         "q": "Does it commit to clear, sourced claims?",
         "score_label": "Clarity index",
         "plain": ("hedge_density", "Hedging", "pct"),
@@ -151,6 +156,7 @@ VIRTUES = [
     {
         "key": "pedantic",
         "title": "Pedantic precision",
+        "short": "Precision",
         "q": "Is every claim it makes defensible?",
         "score_label": "Precision index",
         "judged": True,
@@ -171,6 +177,7 @@ VIRTUES = [
     {
         "key": "thoroughness",
         "title": "Thoroughness",
+        "short": "Thoroughness",
         "q": "Does it cover the ground without padding?",
         "score_label": "Thoroughness index",
         "judged": True,
@@ -446,6 +453,73 @@ _STATUS_PILL = {
 }
 
 
+def _aggregate_section(report: dict) -> str:
+    """Headline scorecard (SPEC §8.3 deviation, on request): one figure per model.
+
+    The overall is the *unweighted* mean of that model's published per-virtue
+    indices (live virtues only); models are ranked by it, with the full per-virtue
+    matrix shown alongside so the average never travels without its breakdown.
+    Every index here is higher-is-better, so a higher number is always better.
+    """
+    live = [v for v in VIRTUES if _is_live(report, v["key"])]
+    if not live:
+        return ""
+    models = report.get("models", [])
+
+    entries = []
+    for m in models:
+        sc = {}
+        for v in live:
+            d = report["virtues"][v["key"]]["by_model"].get(m["id"])
+            s = d.get("score") if d else None
+            if s is not None:
+                sc[v["key"]] = float(s)
+        if sc:
+            entries.append((m, sc, sum(sc.values()) / len(sc)))
+    if not entries:
+        return ""
+    entries.sort(key=lambda e: e[2], reverse=True)
+
+    head_cells = "".join(
+        f'<th class="num" title="{_esc(v["title"])}">{_esc(v["short"])}</th>' for v in live
+    )
+    rows = []
+    for rank, (m, sc, overall) in enumerate(entries, start=1):
+        top = " top" if rank == 1 else ""
+        cells = "".join(
+            f'<td class="num">{round(sc[v["key"]] * 100) if v["key"] in sc else "—"}</td>'
+            for v in live
+        )
+        rows.append(
+            f'<tr class="row{top}">'
+            f'<td class="rank">{rank}</td>'
+            f'<td class="model-cell">{_esc(m["display_name"])}</td>'
+            f'<td class="maker-cell">{_esc(m.get("maker", ""))}</td>'
+            f"{cells}"
+            f'<td class="num overall-col"><span class="big">{round(overall * 100)}</span></td>'
+            "</tr>"
+        )
+
+    n = len(live)
+    return (
+        '<section class="overall">'
+        '<p class="kicker">At a glance &middot; Overall</p>'
+        "<h2>How the models compare overall</h2>"
+        '<p class="lede">A single figure per model: the unweighted average of the per-virtue '
+        f"indices beside it ({n} measured so far), every one scored 0–100 with higher being "
+        "better. We weight no virtue above another — and an average can hide a real weakness "
+        "behind otherwise strong marks, so read it as a starting point and let the detail below "
+        "settle any close call.</p>"
+        '<div class="tablewrap"><table class="board"><thead><tr>'
+        "<th>#</th><th>Model</th><th>Developer</th>"
+        f"{head_cells}"
+        "<th class='num overall-col'>Overall<br><span class='unit'>index, 0–100</span></th>"
+        "</tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+        "</section>"
+    )
+
+
 def _virtue_overview(report: dict) -> str:
     cells = []
     for v in VIRTUES:
@@ -471,8 +545,9 @@ def _virtue_overview(report: dict) -> str:
         '<p class="kicker">What we measure</p>'
         "<h2>The habits of an honest reasoner</h2>"
         '<p class="lede">Each quality is scored on its own and its method published in full — '
-        f"{n_live} measured here now, the rest built to the same standard. There is no blended "
-        "overall score, by design.</p>"
+        f"{n_live} measured here now, the rest built to the same standard. The overall figure "
+        "above averages these with equal weight; the comparison that matters is here, measure by "
+        "measure.</p>"
         f'<div class="virtues">{"".join(cells)}</div>'
         f"{foot}"
         "</section>"
@@ -822,6 +897,9 @@ table.board{border-collapse:collapse;width:100%;font-family:var(--sans);font-siz
 .board tbody tr:hover{background:var(--wash-warm);}
 .board tr.top td{background:linear-gradient(90deg,var(--wash-warm),transparent 70%);}
 .board tr.top:hover td{background:var(--wash-warm);}
+.board th.overall-col,.board td.overall-col{background:var(--wash-warm);
+  border-left:1px solid var(--rule-strong);}
+.board tr.top td.overall-col{background:var(--ember-pale);}
 .rank{font-family:var(--serif);font-weight:700;font-size:21px;color:var(--ink-faint);width:1%;}
 .board tr.top .rank{color:var(--ember);}
 .model-cell{font-family:var(--serif);font-size:17px;font-weight:700;}
@@ -884,11 +962,12 @@ def build_site(report_path: Path | str, out_dir: Path | str) -> Path:
 
     callout = (
         '<div class="callout">'
-        "<h3>Why there is no single score</h3>"
-        "<p>These are different qualities, and bundling them into one ranking would invite gaming "
-        "and hide the trade-offs that matter. Each is reported on its own terms, with its method "
-        "documented in full — so a strong result on one measure can never paper over a weak one "
-        "elsewhere.</p>"
+        "<h3>About the overall score</h3>"
+        "<p>The figure at the top is a simple, unweighted average of the per-virtue indices — a "
+        "quick way to compare models at a glance. But these are genuinely different qualities, and "
+        "one number can mask the trade-offs that matter. Each virtue is also reported on its own "
+        "terms, with its method documented in full, so a strong result on one measure never papers "
+        "over a weak one elsewhere.</p>"
         "</div>"
     )
 
@@ -950,6 +1029,7 @@ public — and publish the methodology in full.</p>
 <hr class="rule-ombre">
 <div class="wrap">
 {banner}
+{_aggregate_section(report)}
 {_split_note(report)}
 {callout}
 {_virtue_overview(report)}
