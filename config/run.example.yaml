@@ -12,3 +12,12 @@ org_pool:
   - Google
   - Meta
   - Mistral
+
+# v2 judge settings (SPEC §10). A judged metric is published only if the judge
+# clears its agreement threshold against the human-labeled validation sample.
+judge:
+  id: mock-judge-v1
+  rubric_version: v1
+  thresholds:
+    pedantic: 0.6
+    thoroughness: 0.6

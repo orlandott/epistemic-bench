@@ -20,6 +20,7 @@
     "tags": {"type": "array", "items": {"type": "string"}},
     "sources": {"type": "array", "items": {"type": "object"}},
     "provenance": {"type": "object"},
+    "params": {"type": "object"},
     "conditions": {
       "type": "object",
       "minProperties": 1,
@@ -30,7 +31,8 @@
           "id": {"type": "string"},
           "vars": {"type": "object"},
           "template_override": {"type": "string"},
-          "normalize": {"type": "object"}
+          "normalize": {"type": "object"},
+          "user_view": {"type": "string"}
         }
       }
     },

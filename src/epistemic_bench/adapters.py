@@ -75,45 +75,149 @@ def _rng(seed: int, *parts: str) -> random.Random:
     return random.Random(zlib.crc32(key))
 
 
-def _synth_response(item: Item, model_id: str, profile: Mapping[str, Any], seed: int) -> str:
-    """Deterministic synthetic completion for the mock provider."""
-    rng = _rng(seed, model_id, item.id)
+def _clamp_conf(x: float) -> float:
+    return min(0.99, max(0.02, x))
+
+
+def _synth_calibration(item: Item, model_id: str, profile: Mapping[str, Any], seed: int) -> str:
+    rng = _rng(seed, "cal", model_id, item.id)
     rf = item.response_format
+    options = [str(o).strip().upper() for o in (rf.options or ["A", "B", "C", "D"])]
+    correct = (item.reference.answer or options[0]).strip().upper()
+    acc = float((profile.get("accuracy", {}) or {}).get(item.difficulty or "medium", 0.7))
+    bias = float(profile.get("confidence_bias", 0.0))
+    noise = float(profile.get("confidence_noise", 0.05))
 
+    is_correct = rng.random() < acc
+    answer = correct if is_correct else rng.choice([o for o in options if o != correct] or [correct])
+    conf = _clamp_conf(acc + bias + rng.gauss(0.0, noise) + (0.06 if is_correct else -0.06))
+    return f"ANSWER: {answer}  CONFIDENCE: {conf:.2f}"
+
+
+def _synth_sycophancy(item: Item, model_id: str, condition_id: str, profile: Mapping[str, Any], seed: int) -> str:
+    """Stable base answer per (model, item); cave to the user's asserted view at
+    a per-model rate on conditions that disagree with the base."""
+    rf = item.response_format
+    options = [str(o).strip().upper() for o in (rf.options or ["YES", "NO", "UNCERTAIN"])]
+    correct = (item.reference.answer or options[0]).strip().upper()
+
+    base_rng = _rng(seed, "syc-base", model_id, item.id)
+    acc = float(profile.get("sycophancy_accuracy", 0.78))
+    base = correct if base_rng.random() < acc else base_rng.choice([o for o in options if o != correct] or [correct])
+
+    cond = item.conditions.get(condition_id)
+    user_view = (cond.user_view or "").strip().upper() if cond and cond.user_view else None
+    crng = _rng(seed, "syc-conf", model_id, item.id, condition_id)
+
+    if user_view is None:  # neutral
+        return f"ANSWER: {base}  CONFIDENCE: {_clamp_conf(0.70 + crng.gauss(0, 0.05)):.2f}"
+
+    syco = float(profile.get("sycophancy", 0.3))
+    cave_rng = _rng(seed, "syc-cave", model_id, item.id, condition_id)
+    if user_view != base and cave_rng.random() < syco:
+        return f"ANSWER: {user_view}  CONFIDENCE: {_clamp_conf(0.74 + crng.gauss(0, 0.04)):.2f}"
+    # resisted: hold the base answer, slightly lower confidence under push-back
+    return f"ANSWER: {base}  CONFIDENCE: {_clamp_conf(0.63 + crng.gauss(0, 0.05)):.2f}"
+
+
+def _synth_creator_bias(item: Item, model_id: str, condition_id: str, profile: Mapping[str, Any], seed: int) -> str:
+    """A genuine per-(model, item) stance on the position, plus a per-model
+    loyalty bump applied only when the position is attributed to ``org:self``."""
+    lo, hi = item.response_format.stance_scale or (1, 5)
+    base = _rng(seed, "cb-base", model_id, item.id).gauss((lo + hi) / 2.0, 0.8)
+    val = base + _rng(seed, "cb-noise", model_id, item.id, condition_id).gauss(0.0, 0.3)
+    if condition_id == "org:self":
+        val += float(profile.get("creator_loyalty", 0.0))
+    stance = int(round(min(float(hi), max(float(lo), val))))
+    return f"STANCE: {stance}"
+
+
+def _synth_framing(item: Item, model_id: str, condition_id: str, profile: Mapping[str, Any], seed: int) -> str:
+    """Stable canonical preference per (model, item); swayed to the other
+    canonical option on non-neutral framings at a per-model rate. The chosen
+    canonical is mapped back to this condition's displayed label, so an
+    order-robust model still answers consistently under reordering."""
+    rf = item.response_format
+    canon_set = sorted({v for c in item.conditions.values() if c.normalize for v in c.normalize.values()})
+    cond = item.conditions.get(condition_id)
+    normalize = (cond.normalize if cond else None) or {}
+    canon_to_label = {v: k for k, v in normalize.items()}
+
+    if not canon_set or not canon_to_label:
+        opt = _rng(seed, "fr-base", model_id, item.id).choice([str(o).strip().upper() for o in (rf.options or ["A", "B"])])
+        return f"CHOICE: {opt}"
+
+    pref = _rng(seed, "fr-base", model_id, item.id).choice(canon_set)
+    chosen = pref
+    if condition_id != "neutral":
+        sens = float(profile.get("framing_sensitivity", 0.2))
+        if _rng(seed, "fr-sway", model_id, item.id, condition_id).random() < sens:
+            others = [c for c in canon_set if c != pref]
+            if others:
+                chosen = _rng(seed, "fr-pick", model_id, item.id, condition_id).choice(others)
+    label = canon_to_label.get(chosen) or canon_to_label.get(pref) or next(iter(canon_to_label.values()))
+    return f"CHOICE: {label}"
+
+
+def _synth_clarity(item: Item, model_id: str, profile: Mapping[str, Any], seed: int) -> str:
+    """Generate a short answer whose hedge density and commitment-shifts depend on
+    a per-model profile, so the (real) clarity scorer has real text to analyze."""
+    rng = _rng(seed, "clarity", model_id, item.id)
+    hedginess = float(profile.get("clarity_hedginess", 0.3))
+    shiftiness = float(profile.get("clarity_shift", hedginess * 0.6))
+    cores = [
+        "The effect is real and well documented",
+        "The primary cause is the underlying physical mechanism",
+        "The evidence clearly supports this conclusion",
+        "This follows directly from the established data",
+    ]
+    hedge_lead = ["Perhaps", "Arguably", "It seems", "To some extent"]
+    hedge_tail = ["in a sense", "more or less", "in some ways"]
+    sentences = []
+    for _ in range(3):
+        s = rng.choice(cores)
+        if rng.random() < hedginess:
+            s = rng.choice(hedge_lead) + ", " + s[0].lower() + s[1:]
+        if rng.random() < hedginess * 0.7:
+            s = s + " " + rng.choice(hedge_tail)
+        if rng.random() < shiftiness:
+            s = s + ", but it might not be"
+        sentences.append(s + ".")
+    if rng.random() < shiftiness:
+        sentences.append("This is definitely true, although it could possibly be wrong.")
+    return " ".join(sentences)
+
+
+def _synth_response(item: Item, model_id: str, condition_id: str, profile: Mapping[str, Any], seed: int) -> str:
+    """Deterministic synthetic completion for the mock provider, by metric."""
+    if item.metric == "sycophancy":
+        return _synth_sycophancy(item, model_id, condition_id, profile, seed)
+    if item.metric == "creator_bias":
+        return _synth_creator_bias(item, model_id, condition_id, profile, seed)
+    if item.metric == "framing":
+        return _synth_framing(item, model_id, condition_id, profile, seed)
+    if item.metric == "clarity":
+        return _synth_clarity(item, model_id, profile, seed)
+
+    rf = item.response_format
     if rf.type == "mcq" and rf.require_confidence:
-        options = [str(o).strip().upper() for o in (rf.options or ["A", "B", "C", "D"])]
-        correct = (item.reference.answer or options[0]).strip().upper()
-        difficulty = item.difficulty or "medium"
-        acc_map = profile.get("accuracy", {}) or {}
-        acc = float(acc_map.get(difficulty, 0.7))
-        bias = float(profile.get("confidence_bias", 0.0))
-        noise = float(profile.get("confidence_noise", 0.05))
+        return _synth_calibration(item, model_id, profile, seed)
 
-        is_correct = rng.random() < acc
-        if is_correct:
-            answer = correct
-        else:
-            distractors = [o for o in options if o != correct] or [correct]
-            answer = rng.choice(distractors)
-
-        conf = acc + bias + rng.gauss(0.0, noise) + (0.06 if is_correct else -0.06)
-        conf = min(0.99, max(0.02, conf))
-        return f"ANSWER: {answer}  CONFIDENCE: {conf:.2f}"
-
+    rng = _rng(seed, model_id, item.id, condition_id)
     if rf.type == "stance":
         lo, hi = (rf.stance_scale or [1, 5])
         return f"STANCE: {rng.randint(int(lo), int(hi))}  (synthetic)"
-
     if rf.type == "mcq":
         return f"CHOICE: {rng.choice([str(o).strip().upper() for o in (rf.options or ['A'])])}"
-
     return "(synthetic mock response)"
 
 
 def make_mock_adapter(items_by_id: Mapping[str, Item], profiles: Mapping[str, dict], seed: int) -> CallFn:
     async def call(prompt: str, params: Mapping[str, Any]) -> str:
         item = items_by_id[params["item_id"]]
-        return _synth_response(item, params["model_id"], profiles.get(params["model_id"], {}), seed)
+        return _synth_response(
+            item, params["model_id"], params.get("condition_id", "base"), profiles.get(params["model_id"], {}), seed
+        )
 
     return call
 

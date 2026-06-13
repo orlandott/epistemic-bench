@@ -103,7 +103,9 @@ Paired prompts: an **identical question** asked (a) neutrally and (b) with the
 user's stated belief/identity prepended. Score = **answer-flip rate** and/or
 **confidence shift** between conditions. Because items can carry a known correct
 answer (`reference.kind == "answer"`), the scorer can distinguish *flipping
-toward the user* from *flipping toward the truth*.
+toward the user* from *flipping toward the truth*. The answer the user asserts in
+each primed condition is recorded in `Condition.user_view`, so the scorer
+measures directional movement toward it.
 
 > **OPEN — canonical sycophancy scalar.** Recommended: report **both** flip-rate
 > and mean confidence-shift; make **directional flip-rate toward the user's
@@ -174,6 +176,7 @@ deliberately treated as load-bearing: it must express single-prompt items
 | `sources` | array | | Citations for ground truth `{title, url, quote}`. Needed for v2 claim-checking and clarity. |
 | `tags` | array | | Includes the **rotation tag** `rotation:<group>` (§8.2) and domain tags. |
 | `provenance` | object | | `{author, created, license, source}`. |
+| `params` | object | | Metric-specific config (e.g. thoroughness `key_points`, `conciseness_budget`, `prompt_kind`; pedantic `n_claims`). |
 
 `Condition` object:
 
@@ -183,6 +186,7 @@ deliberately treated as load-bearing: it must express single-prompt items
 | `vars` | object | | Per-condition template variables. |
 | `template_override` | string | | Replaces `prompt_template` for this condition if present. |
 | `normalize` | object | | Optional raw-label → canonical-id map (framing reorders). |
+| `user_view` | string | | The answer the simulated user asserts in this condition (sycophancy); the scorer measures directional movement toward it. |
 
 `reference` object:
 
@@ -497,6 +501,7 @@ class Condition:
     vars: Mapping[str, str] = field(default_factory=dict)
     template_override: Optional[str] = None
     normalize: Optional[Mapping[str, str]] = None   # raw label → canonical id (framing)
+    user_view: Optional[str] = None                 # answer the simulated user asserts (sycophancy)
 
 
 @dataclass(frozen=True)
@@ -560,6 +565,7 @@ class ScoringContext:
     model: ModelInfo
     rng_seed: int = 0
     extra: Mapping[str, Any] = field(default_factory=dict)
+    judge: Optional[Callable[..., str]] = None  # injected judge for v2 (JudgeRequest -> verdict text)
 
 
 @dataclass(frozen=True)
@@ -836,6 +842,19 @@ used for each number, so a score is never ambiguous about what it measured.
 > a fixed retire/promote/mint budget per metric. Confirm cadence and budget;
 > document both in `methodology/rotation.md`.
 
+### 8.2.1 Implemented as
+
+The split + rotation policy is realized by a machine-readable manifest
+(`itembank/manifest.yaml`): `bank_version`, `canonical_split`, and the `active`
+operationalization per metric (with reserve groups + a `burned` list). The loader
+takes multiple roots (public dir + private repo); `MetricScore` carries its
+item's `split`; the aggregator computes public and private numbers separately and
+`to_report` publishes the canonical split as the headline with the public number
+as `public_reference` (falling back to public, clearly labeled, if the private
+split is absent). Tooling: `epb manifest` (active vs reserve + split counts) and
+`epb rotate` (dry-run burn/promote/activate plan). Full policy:
+`methodology/rotation.md`.
+
 ### 8.3 No composite score (decision)
 
 Per the design decision in this session, the leaderboard publishes a
@@ -882,6 +901,16 @@ v2 score is published until it clears this gate:
    scorer is **registered and publishable only if agreement ≥ threshold**.
 4. **Re-validation on change.** Any change to rubric or judge model re-triggers
    the gate.
+
+**Implementation refinement.** Judged scorers are *registered and computed* like
+any other (so the validation harness and the score stage can run them), but the
+gate is enforced at **publish time**: `aggregate.to_report` includes a judged
+metric under `virtues` only if a passing `validation/judge/<metric>.result.json`
+exists, otherwise it is moved to `report.withheld`. This is the practical reading
+of "registered and publishable only if agreement ≥ threshold" — an unvalidated
+judge score is never published. The scorer↔judge boundary is a synchronous
+`JudgeFn(JudgeRequest) -> verdict text` injected via `ScoringContext.judge`, which
+keeps the scorers pure and unit-testable with a fake judge.
 
 > **OPEN — judge identity & self-judging.** Recommended: the judge **must not
 > share a maker** with the model under test (acute given the creator-bias

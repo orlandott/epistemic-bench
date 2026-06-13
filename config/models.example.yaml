@@ -7,9 +7,17 @@
 # real call in adapters.py. The `mock:` block is ignored by real providers.
 #
 # The three profiles below illustrate distinct calibration behaviors:
-#   - claude-demo  : near-calibrated
-#   - gpt-demo     : overconfident
-#   - gemini-demo  : underconfident
+#   - claude-demo  : near-calibrated, sycophancy-resistant, low creator loyalty
+#   - gpt-demo     : overconfident, more sycophantic, high creator loyalty
+#   - gemini-demo  : underconfident, moderately sycophantic, mild creator loyalty
+#
+# mock keys: accuracy/confidence_* drive calibration; sycophancy is the rate of
+# caving to a user's asserted view, sycophancy_accuracy the base (neutral)
+# correctness on sycophancy items; creator_loyalty is the stance bump (1-5 scale)
+# added when a position is attributed to the model's own maker (org:self);
+# framing_sensitivity is the rate of changing the canonical choice under a
+# reframing (loaded wording or reordered options); clarity_hedginess /
+# clarity_shift drive how vague/self-undercutting the synthetic clarity text is.
 
 seed: 7
 
@@ -23,6 +31,19 @@ models:
       accuracy: { easy: 0.92, medium: 0.78, hard: 0.56 }
       confidence_bias: 0.02
       confidence_noise: 0.06
+      sycophancy: 0.12
+      sycophancy_accuracy: 0.85
+      creator_loyalty: 0.15
+      framing_sensitivity: 0.10
+      clarity_hedginess: 0.10
+      clarity_shift: 0.05
+      # v2 mock-judge quality profile
+      pedantic_precision: 0.92
+      pedantic_false_rate: 0.03
+      pedantic_ambiguity: 0.08
+      thoroughness_coverage: 0.85
+      thoroughness_balance: 0.88
+      thoroughness_verbosity: 0.05
 
   - id: gpt-demo
     provider: mock
@@ -33,6 +54,19 @@ models:
       accuracy: { easy: 0.90, medium: 0.74, hard: 0.52 }
       confidence_bias: 0.18
       confidence_noise: 0.05
+      sycophancy: 0.50
+      sycophancy_accuracy: 0.80
+      creator_loyalty: 1.10
+      framing_sensitivity: 0.40
+      clarity_hedginess: 0.55
+      clarity_shift: 0.40
+      # v2 mock-judge quality profile
+      pedantic_precision: 0.80
+      pedantic_false_rate: 0.10
+      pedantic_ambiguity: 0.15
+      thoroughness_coverage: 0.78
+      thoroughness_balance: 0.80
+      thoroughness_verbosity: 0.30
 
   - id: gemini-demo
     provider: mock
@@ -43,3 +77,16 @@ models:
       accuracy: { easy: 0.88, medium: 0.72, hard: 0.50 }
       confidence_bias: -0.12
       confidence_noise: 0.07
+      sycophancy: 0.25
+      sycophancy_accuracy: 0.78
+      creator_loyalty: 0.50
+      framing_sensitivity: 0.22
+      clarity_hedginess: 0.30
+      clarity_shift: 0.20
+      # v2 mock-judge quality profile
+      pedantic_precision: 0.85
+      pedantic_false_rate: 0.06
+      pedantic_ambiguity: 0.12
+      thoroughness_coverage: 0.82
+      thoroughness_balance: 0.83
+      thoroughness_verbosity: 0.15

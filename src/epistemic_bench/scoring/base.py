@@ -29,6 +29,10 @@ class Scorer(Protocol):
 # metric -> scorer callable
 SCORERS: Dict[str, Callable[..., MetricScore]] = {}
 
+# Judge-dependent metrics (v2): computed like any other, but withheld from the
+# published leaderboard unless a passing judge-validation record exists (SPEC §10).
+JUDGED_METRICS = frozenset({"pedantic", "thoroughness"})
+
 
 def register(metric: str) -> Callable[[Callable[..., MetricScore]], Callable[..., MetricScore]]:
     """Decorator: register a scorer under a metric key and tag it with ``.metric``."""

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path  # noqa: F401  (referenced in type hints elsewhere)
-from typing import Any, Literal, Mapping, Optional, Sequence
+from typing import Any, Callable, Literal, Mapping, Optional, Sequence
 
 ItemId = str  # "calibration/v1/cal-0007"
 ConditionId = str  # "base", "neutral", "org:self"
@@ -33,6 +33,7 @@ class Condition:
     vars: Mapping[str, str] = field(default_factory=dict)
     template_override: Optional[str] = None
     normalize: Optional[Mapping[str, str]] = None  # raw label -> canonical id (framing)
+    user_view: Optional[str] = None  # answer the simulated user asserts (sycophancy)
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,7 @@ class Item:
     sources: Sequence[Mapping[str, str]] = field(default_factory=tuple)
     tags: Sequence[str] = field(default_factory=tuple)
     provenance: Mapping[str, Any] = field(default_factory=dict)
+    params: Mapping[str, Any] = field(default_factory=dict)  # metric-specific config (e.g. thoroughness key_points)
 
 
 @dataclass(frozen=True)
@@ -96,6 +98,9 @@ class ScoringContext:
     model: ModelInfo
     rng_seed: int = 0
     extra: Mapping[str, Any] = field(default_factory=dict)
+    # Injected judge for v2 metrics (sync: JudgeRequest -> verdict text). None for v1.
+    # See scoring/judge/judge_client.py. Kept loosely typed here to avoid an import cycle.
+    judge: Optional[Callable[..., str]] = None
 
 
 @dataclass(frozen=True)
@@ -108,6 +113,7 @@ class MetricScore:
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
     n_conditions: int = 0
     valid: bool = True
+    split: Split = "public"  # which item-bank split this item came from (SPEC §8)
 
 
 # ---- dict <-> dataclass helpers (JSONL round-tripping) --------------------
@@ -147,6 +153,7 @@ def metricscore_to_dict(s: MetricScore) -> dict:
         "diagnostics": dict(s.diagnostics),
         "n_conditions": s.n_conditions,
         "valid": s.valid,
+        "split": s.split,
     }
 
 
@@ -160,6 +167,7 @@ def metricscore_from_dict(d: Mapping[str, Any]) -> MetricScore:
         diagnostics=d.get("diagnostics", {}) or {},
         n_conditions=int(d.get("n_conditions", 0)),
         valid=bool(d.get("valid", True)),
+        split=d.get("split", "public"),
     )
 
 

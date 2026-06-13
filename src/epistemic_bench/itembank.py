@@ -89,6 +89,7 @@ def item_from_dict(d: dict) -> Item:
             vars=c.get("vars", {}) or {},
             template_override=c.get("template_override"),
             normalize=c.get("normalize"),
+            user_view=c.get("user_view"),
         )
         for cid, c in d["conditions"].items()
     }
@@ -119,6 +120,7 @@ def item_from_dict(d: dict) -> Item:
         sources=tuple(d.get("sources", []) or []),
         tags=tuple(d.get("tags", []) or []),
         provenance=d.get("provenance", {}) or {},
+        params=d.get("params", {}) or {},
     )
 
 
