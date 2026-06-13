@@ -175,7 +175,12 @@ def _virtue_status(report: dict, key: str) -> str:
 
 def _section_tags(report: dict, virtue: dict) -> str:
     """Small inline tags under a section's lede: which split the numbers come from,
-    and (for judged metrics) the judge-validation evidence."""
+    and (for judged metrics) the judge-validation evidence.
+
+    Suppressed entirely in demo mode: the demo banner already states the numbers
+    are synthetic, so the split / judge-validation caveats are just noise here."""
+    if report.get("demo"):
+        return ""
     tags = []
     cs = virtue.get("canonical_split", report.get("canonical_split", "public"))
     if cs == "private":
@@ -195,6 +200,10 @@ def _section_tags(report: dict, virtue: dict) -> str:
 
 
 def _split_note(report: dict) -> str:
+    # In demo mode the banner already explains the numbers are synthetic; the
+    # public/held-out provenance caveat would only repeat that, so drop it.
+    if report.get("demo"):
+        return ""
     if "private" in (report.get("splits_loaded") or []):
         return (
             '<div class="callout split"><h3>Held-out scoring</h3>'
@@ -212,6 +221,10 @@ def _split_note(report: dict) -> str:
 
 
 def _withheld_section(report: dict) -> str:
+    # The "held back pending validation" rationale is meaningless for synthetic
+    # demo data — the banner already covers it — so skip the whole section.
+    if report.get("demo"):
+        return ""
     withheld = report.get("withheld", {})
     if not withheld:
         return ""
@@ -570,6 +583,10 @@ def _virtue_section(report: dict, vkey: str) -> str:
         f"{_esc(virtue.get('definition', ''))}. The published score is normalised to 0–100, "
         "higher is better."
     )
+    # Demo data: drop the "published only after the judge passes validation"
+    # caveat sentence — the banner already says these numbers are synthetic.
+    if report.get("demo"):
+        gloss = re.sub(r"\s*[^.]*judge passes validation[^.]*\.", "", gloss)
     technical = (
         '<details class="tech"><summary>Show the full technical detail</summary>'
         '<div class="tablewrap"><table><thead>' + tech_head + "</thead>"
