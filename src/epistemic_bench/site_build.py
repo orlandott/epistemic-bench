@@ -1,8 +1,13 @@
 """Static leaderboard builder (SPEC §7.7).
 
-Renders ``report.json`` to a single self-contained ``index.html`` with inline-SVG
-reliability diagrams. No JS framework, no plotting deps. This is the only place
-visualization lives.
+Renders ``report.json`` to a single self-contained ``index.html``: an editorial,
+journalist- and policymaker-facing page (no JS framework, no plotting deps, no
+external fonts — everything inline so the file renders offline). Plain language
+leads; the precise statistics (ECE, Brier, 1−ECE, flip rates, bootstrap CIs) are
+preserved in on-demand "technical detail" panels so auditability (SPEC §9) is
+never lost. Any scored virtue renders automatically.
+
+This is the only place visualization lives.
 
 Note (implementation deviation from SPEC layout): the generator lives inside the
 package (importable) and emits to ``site/out/`` rather than living at repo-root
@@ -12,6 +17,8 @@ package (importable) and emits to ``site/out/`` rather than living at repo-root
 from __future__ import annotations
 
 import html
+import re
+from datetime import datetime
 from pathlib import Path
 
 from .jsonlio import read_json
@@ -25,159 +32,560 @@ def _fmt(x, nd: int = 3) -> str:
     return "—" if x is None else f"{float(x):.{nd}f}"
 
 
-def _reliability_svg(bins: list[dict], w: int = 260, h: int = 260, pad: int = 34) -> str:
-    iw, ih = w - 2 * pad, h - 2 * pad
-
-    def px(x: float) -> float:
-        return pad + x * iw
-
-    def py(y: float) -> float:
-        return h - pad - y * ih
-
-    parts = [f'<svg viewBox="0 0 {w} {h}" width="{w}" height="{h}" role="img" aria-label="reliability diagram">']
-    parts.append(f'<rect x="{pad}" y="{pad}" width="{iw}" height="{ih}" fill="#fff" stroke="#cbd5e1"/>')
-    # perfect-calibration diagonal
-    parts.append(f'<line x1="{px(0)}" y1="{py(0)}" x2="{px(1)}" y2="{py(1)}" stroke="#94a3b8" stroke-dasharray="4 3"/>')
-    # 0.5 gridlines
-    parts.append(f'<line x1="{px(0.5)}" y1="{py(0)}" x2="{px(0.5)}" y2="{py(1)}" stroke="#eef2f7"/>')
-    parts.append(f'<line x1="{px(0)}" y1="{py(0.5)}" x2="{px(1)}" y2="{py(0.5)}" stroke="#eef2f7"/>')
-
-    pts = [b for b in bins if b.get("n", 0) > 0]
-    if pts:
-        poly = " ".join(f"{px(b['mean_conf']):.1f},{py(b['accuracy']):.1f}" for b in pts)
-        parts.append(f'<polyline points="{poly}" fill="none" stroke="#2563eb" stroke-width="1.5" opacity="0.7"/>')
-        for b in pts:
-            r = max(2.5, min(10.0, 1.6 * (b["n"] ** 0.5)))
-            parts.append(
-                f'<circle cx="{px(b["mean_conf"]):.1f}" cy="{py(b["accuracy"]):.1f}" r="{r:.1f}" '
-                f'fill="#2563eb" fill-opacity="0.55" stroke="#1e3a8a"/>'
-            )
-
-    # axis labels + ticks
-    parts.append(f'<text x="{px(0.5):.0f}" y="{h - 6}" text-anchor="middle" font-size="11" fill="#475569">stated confidence</text>')
-    parts.append(f'<text x="12" y="{py(0.5):.0f}" text-anchor="middle" font-size="11" fill="#475569" transform="rotate(-90 12 {py(0.5):.0f})">accuracy</text>')
-    for t in (0.0, 0.5, 1.0):
-        parts.append(f'<text x="{px(t):.0f}" y="{h - pad + 12}" text-anchor="middle" font-size="9" fill="#94a3b8">{t:g}</text>')
-        parts.append(f'<text x="{pad - 6}" y="{py(t):.0f}" text-anchor="end" font-size="9" fill="#94a3b8">{t:g}</text>')
-    parts.append("</svg>")
-    return "".join(parts)
-
-
-_STYLE = """
-:root { color-scheme: light; }
-* { box-sizing: border-box; }
-body { font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-       margin: 0; color: #0f172a; background: #f8fafc; }
-.wrap { max-width: 980px; margin: 0 auto; padding: 28px 20px 60px; }
-h1 { margin: 0 0 4px; font-size: 26px; }
-h2 { margin: 32px 0 10px; font-size: 19px; }
-.sub { color: #475569; margin: 0 0 18px; }
-.banner { background: #fef3c7; border: 1px solid #f59e0b; color: #7c2d12;
-          padding: 10px 14px; border-radius: 8px; margin: 0 0 18px; font-size: 14px; }
-.note { color: #475569; font-size: 13px; margin: 6px 0 14px; }
-table { border-collapse: collapse; width: 100%; background: #fff; border: 1px solid #e2e8f0;
-        border-radius: 8px; overflow: hidden; font-size: 14px; }
-th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid #eef2f7; }
-th { background: #f1f5f9; font-weight: 600; }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-tr:last-child td { border-bottom: none; }
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 16px; }
-.card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; }
-.card h3 { margin: 0 0 2px; font-size: 15px; }
-.card .maker { color: #64748b; font-size: 12px; margin: 0 0 8px; }
-.legend { color: #64748b; font-size: 12px; margin-top: 10px; }
-footer { margin-top: 36px; color: #64748b; font-size: 12px; border-top: 1px solid #e2e8f0; padding-top: 14px; }
-code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; }
-"""
-
-
-def _calibration_section(report: dict) -> str:
-    virtue = report.get("virtues", {}).get("calibration")
-    if not virtue:
-        return "<p>No calibration results in this report.</p>"
-    by_model = virtue["by_model"]
-    models = report.get("models", [])
-
-    rows = []
-    cards = []
-    for m in models:
-        mid = m["id"]
-        d = by_model.get(mid)
-        if not d:
-            continue
-        raw = d.get("raw", {})
-        ci = d.get("ci")
-        ci_txt = f' <span style="color:#94a3b8">({_fmt(ci[0],2)}–{_fmt(ci[1],2)})</span>' if ci else ""
-        rows.append(
-            "<tr>"
-            f"<td>{_esc(m['display_name'])}</td>"
-            f"<td>{_esc(m.get('maker',''))}</td>"
-            f'<td class="num">{_fmt(raw.get("accuracy"),3)}</td>'
-            f'<td class="num">{_fmt(raw.get("ece"),3)}</td>'
-            f'<td class="num">{_fmt(raw.get("brier"),3)}</td>'
-            f'<td class="num"><b>{_fmt(d.get("score"),3)}</b>{ci_txt}</td>'
-            f'<td class="num">{int(raw.get("n_items",0))}</td>'
-            "</tr>"
-        )
-        cards.append(
-            '<div class="card">'
-            f"<h3>{_esc(m['display_name'])}</h3>"
-            f'<p class="maker">{_esc(m.get("maker",""))} · score 1−ECE = {_fmt(d.get("score"),3)}</p>'
-            f"{_reliability_svg(d.get('reliability', []))}"
-            "</div>"
-        )
-
-    return (
-        f'<p class="note">{_esc(virtue.get("definition",""))}. Points on the dashed diagonal are '
-        "perfectly calibrated; above = underconfident, below = overconfident. Point size ∝ items in bin.</p>"
-        "<table><thead><tr>"
-        "<th>Model</th><th>Maker</th><th class='num'>Accuracy</th><th class='num'>ECE</th>"
-        "<th class='num'>Brier</th><th class='num'>Score (1−ECE)</th><th class='num'>n</th>"
-        "</tr></thead><tbody>" + "".join(rows) + "</tbody></table>"
-        '<div class="cards">' + "".join(cards) + "</div>"
-    )
+def _pct(x) -> str:
+    return "—" if x is None else f"{round(float(x) * 100)}%"
 
 
 def _title(name: str) -> str:
     return name.replace("_", " ").title()
 
 
-def _generic_virtue_section(virtue: dict, models: list) -> str:
-    """Render any scored virtue as a table: Model | Maker | Score | raw cols | n."""
-    by_model = virtue["by_model"]
-    cols: set[str] = set()
-    for m in models:
-        d = by_model.get(m["id"])
-        if d:
-            cols |= set(d.get("raw", {}).keys())
-    cols.discard("n_items")
-    col_order = sorted(cols)
+def _slug(s: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9]+", "-", str(s)).strip("-") or "x"
 
-    head = (
-        "<tr><th>Model</th><th>Maker</th><th class='num'>Score</th>"
-        + "".join(f"<th class='num'>{_esc(c.replace('_', ' '))}</th>" for c in col_order)
-        + "<th class='num'>n</th></tr>"
+
+def _human_date(iso) -> str:
+    """ISO-8601 → 'June 13, 2026' (no platform-specific strftime flags)."""
+    if not iso:
+        return "—"
+    try:
+        dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        return f"{dt.strftime('%B')} {dt.day}, {dt.year}"
+    except Exception:
+        return str(iso)[:10]
+
+
+# --- plain-language virtue catalogue (SPEC §3, reframed for a lay reader) ----
+# `q` heads the detailed section; `blurb` is the standfirst; `score_label`/`unit`
+# name the published 0–100 index; `plain` (raw_key, label, kind) surfaces one
+# journalist-meaningful raw number in the friendly table.
+
+VIRTUES = [
+    {
+        "key": "calibration",
+        "title": "Calibration",
+        "q": "Does the model know what it knows?",
+        "score_label": "Calibration index",
+        "blurb": "Does the model know what it knows? It answers factual questions and must "
+        "state how sure it is — then it should be right about as often as it claims, neither "
+        "bluffing nor needlessly hedging.",
+    },
+    {
+        "key": "sycophancy",
+        "title": "Sycophancy resistance",
+        "q": "Does it hold its ground when you push back?",
+        "score_label": "Resistance index",
+        "plain": ("toward_user_rate", "Caved to user", "pct"),
+        "blurb": "Does it hold its ground? We ask the same question neutrally, then again after "
+        "telling the model what we'd like to hear, and measure how often it switches its answer "
+        "to match.",
+    },
+    {
+        "key": "creator_bias",
+        "title": "Creator bias",
+        "q": "Does it favour its own maker?",
+        "score_label": "Impartiality index",
+        "blurb": "Does it favour its own maker? We attach the same position to different "
+        "companies and check whether a model rates an idea more warmly when it is credited to "
+        "the firm that built it.",
+    },
+    {
+        "key": "framing",
+        "title": "Framing consistency",
+        "q": "Does the wording change the verdict?",
+        "score_label": "Consistency index",
+        "blurb": "Does the wording change the verdict? We pose one underlying question in loaded "
+        "and in neutral terms, with the options reordered, and look for an answer that holds "
+        "steady.",
+    },
+    {
+        "key": "clarity",
+        "title": "Clarity",
+        "q": "Does it commit to clear, sourced claims?",
+        "score_label": "Clarity index",
+        "blurb": "Does it commit to clear, sourced claims? We reward crisp statements that can "
+        "be traced to cited evidence and penalise hedging that quietly shifts the claim.",
+    },
+]
+VIRTUE_BY_KEY = {v["key"]: v for v in VIRTUES}
+
+# Tailored plain-language glossary for the technical panel; falls back to the
+# report's own definition for any virtue not listed.
+TECH_GLOSSARY = {
+    "sycophancy": "<b>Resistance index</b> is 1 − the rate of switching to the user's asserted "
+    "view, rescaled to 0–100. <b>Caved to user</b> is how often the model changed its answer to "
+    "match what the user signalled. <b>Flip rate</b> counts any change of answer; <b>mean conf "
+    "shift</b> is the average change in stated confidence after the user pushed back; "
+    "<b>abandoned correct rate</b> is how often it dropped a correct answer. Full method: "
+    "<code>methodology/sycophancy.md</code>.",
+}
+
+
+def _is_live(report: dict, key: str) -> bool:
+    v = report.get("virtues", {}).get(key)
+    if not v:
+        return False
+    return any((d or {}).get("score") is not None for d in v.get("by_model", {}).values())
+
+
+# --- reliability diagram (calibration only) ----------------------------------
+
+
+def _mean_conf(reliability: list[dict]):
+    num, den = 0.0, 0
+    for b in reliability:
+        n = b.get("n", 0)
+        if n > 0:
+            num += n * b.get("mean_conf", 0.0)
+            den += n
+    return (num / den) if den else None
+
+
+def _tendency(gap):
+    """Stated-confidence minus accuracy → plain label + palette colour."""
+    if gap is None:
+        return ("Not enough data", "#8a847a")
+    if gap >= 0.10:
+        return ("Overconfident", "#c2520f")
+    if gap >= 0.04:
+        return ("Leans overconfident", "#d2691e")
+    if gap <= -0.10:
+        return ("Underconfident", "#9a948a")
+    if gap <= -0.04:
+        return ("Leans underconfident", "#9a948a")
+    return ("Well matched", "#141414")
+
+
+def _reliability_svg(bins: list[dict], gid: str, w: int = 300, h: int = 250) -> str:
+    padL, padR, padT, padB = 42, 16, 18, 38
+    iw, ih = w - padL - padR, h - padT - padB
+    g = f"grad-{gid}"
+
+    def px(x: float) -> float:
+        return padL + x * iw
+
+    def py(y: float) -> float:
+        return padT + (1 - y) * ih
+
+    sans = 'font-family="Helvetica Neue,Helvetica,Arial,sans-serif"'
+    P = [
+        f'<svg viewBox="0 0 {w} {h}" width="100%" height="auto" '
+        f'preserveAspectRatio="xMidYMid meet" role="img" '
+        f'aria-label="stated confidence versus actual accuracy">'
+    ]
+    P.append(
+        f'<defs><linearGradient id="{g}" x1="0" y1="1" x2="1" y2="0">'
+        '<stop offset="0" stop-color="#9c3b13"/>'
+        '<stop offset="0.55" stop-color="#c2520f"/>'
+        '<stop offset="1" stop-color="#e8833a"/></linearGradient></defs>'
     )
-    rows = []
-    for m in models:
-        d = by_model.get(m["id"])
-        if not d:
-            continue
-        raw = d.get("raw", {})
-        ci = d.get("ci")
-        ci_txt = f' <span style="color:#94a3b8">({_fmt(ci[0],2)}–{_fmt(ci[1],2)})</span>' if ci else ""
-        rows.append(
-            "<tr>"
-            f"<td>{_esc(m['display_name'])}</td><td>{_esc(m.get('maker',''))}</td>"
-            f"<td class='num'><b>{_fmt(d.get('score'),3)}</b>{ci_txt}</td>"
-            + "".join(f"<td class='num'>{_fmt(raw.get(c),3)}</td>" for c in col_order)
-            + f"<td class='num'>{int(raw.get('n_items',0))}</td></tr>"
+    # zones: below the diagonal = overconfident (warm wash); above = underconfident
+    P.append(
+        f'<polygon points="{px(0):.1f},{py(0):.1f} {px(1):.1f},{py(0):.1f} '
+        f'{px(1):.1f},{py(1):.1f}" fill="#fcf1e8"/>'
+    )
+    P.append(
+        f'<polygon points="{px(0):.1f},{py(0):.1f} {px(0):.1f},{py(1):.1f} '
+        f'{px(1):.1f},{py(1):.1f}" fill="#f6f5f2"/>'
+    )
+    P.append(
+        f'<rect x="{px(0):.1f}" y="{py(1):.1f}" width="{iw}" height="{ih}" '
+        'fill="none" stroke="#d6cfc4"/>'
+    )
+    # perfect-calibration diagonal
+    P.append(
+        f'<line x1="{px(0):.1f}" y1="{py(0):.1f}" x2="{px(1):.1f}" y2="{py(1):.1f}" '
+        'stroke="#b7afa4" stroke-dasharray="4 3"/>'
+    )
+    # zone annotations (NYT-style chart labels)
+    P.append(
+        f'<text x="{px(0.97):.0f}" y="{py(0.08):.0f}" text-anchor="end" font-size="8" '
+        f'fill="#c98a5e" letter-spacing=".06em" {sans}>OVERCONFIDENT</text>'
+    )
+    P.append(
+        f'<text x="{px(0.03):.0f}" y="{py(0.92):.0f}" text-anchor="start" font-size="8" '
+        f'fill="#a9a296" letter-spacing=".06em" {sans}>UNDERCONFIDENT</text>'
+    )
+    pts = [b for b in bins if b.get("n", 0) > 0]
+    if pts:
+        poly = " ".join(f"{px(b['mean_conf']):.1f},{py(b['accuracy']):.1f}" for b in pts)
+        P.append(
+            f'<polyline points="{poly}" fill="none" stroke="url(#{g})" '
+            'stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>'
         )
-    definition = virtue.get("definition", "")
-    return (
-        f'<p class="note">{_esc(definition)}.</p>'
-        "<table><thead>" + head + "</thead><tbody>" + "".join(rows) + "</tbody></table>"
+        for b in pts:
+            r = max(3.0, min(11.0, 1.7 * (b["n"] ** 0.5)))
+            P.append(
+                f'<circle cx="{px(b["mean_conf"]):.1f}" cy="{py(b["accuracy"]):.1f}" '
+                f'r="{r:.1f}" fill="#c2520f" fill-opacity="0.85" stroke="#fff" stroke-width="1.2"/>'
+            )
+    # axis ticks (as percentages) + titles
+    for t in (0.0, 0.5, 1.0):
+        lbl = f"{int(t * 100)}%"
+        P.append(
+            f'<text x="{px(t):.0f}" y="{h - padB + 15:.0f}" text-anchor="middle" '
+            f'font-size="9" fill="#8a847a" {sans}>{lbl}</text>'
+        )
+        P.append(
+            f'<text x="{padL - 7:.0f}" y="{py(t) + 3:.0f}" text-anchor="end" '
+            f'font-size="9" fill="#8a847a" {sans}>{lbl}</text>'
+        )
+    P.append(
+        f'<text x="{px(0.5):.0f}" y="{h - 4:.0f}" text-anchor="middle" font-size="10" '
+        f'fill="#5c574f" {sans}>stated confidence</text>'
     )
+    P.append(
+        f'<text x="13" y="{py(0.5):.0f}" text-anchor="middle" font-size="10" fill="#5c574f" '
+        f'{sans} transform="rotate(-90 13 {py(0.5):.0f})">actual accuracy</text>'
+    )
+    P.append("</svg>")
+    return "".join(P)
+
+
+# --- page sections -----------------------------------------------------------
+
+
+def _virtue_overview(report: dict) -> str:
+    cells = []
+    for v in VIRTUES:
+        live = _is_live(report, v["key"])
+        pill = (
+            '<span class="pill live">Measured now</span>'
+            if live
+            else '<span class="pill soon">In development</span>'
+        )
+        cells.append(
+            '<div class="virtue">'
+            f"<h4>{_esc(v['title'])}</h4>"
+            f"<p>{_esc(v['blurb'])}</p>"
+            f"{pill}"
+            "</div>"
+        )
+    return (
+        '<section>'
+        '<p class="kicker">What we measure</p>'
+        "<h2>Five habits of an honest reasoner</h2>"
+        '<p class="lede">Each quality is scored on its own and its method published in full. '
+        "Live measures appear in detail below; the rest are being built to the same standard.</p>"
+        f'<div class="virtues">{"".join(cells)}</div>'
+        '<p class="footnote">Two further measures — precision under pedantic reading and '
+        "thoroughness — are specified but withheld until an automated judge is validated against "
+        "human ratings, so no such score is published prematurely.</p>"
+        "</section>"
+    )
+
+
+def _calibration_section(report: dict) -> str:
+    virtue = report.get("virtues", {}).get("calibration")
+    if not virtue:
+        return ""
+    by_model = virtue["by_model"]
+    models = report.get("models", [])
+    entries = [(m, by_model[m["id"]]) for m in models if m["id"] in by_model]
+    entries.sort(
+        key=lambda md: (md[1].get("score") is not None, md[1].get("score") or -1.0),
+        reverse=True,
+    )
+
+    rows, cards, tech_rows = [], [], []
+    for rank, (m, d) in enumerate(entries, start=1):
+        raw = d.get("raw", {})
+        score = d.get("score")
+        acc = raw.get("accuracy")
+        index = "—" if score is None else f"{round(float(score) * 100)}"
+        mc = _mean_conf(d.get("reliability", []))
+        gap = None if (mc is None or acc is None) else (mc - acc)
+        tend_label, tend_color = _tendency(gap)
+        top = " top" if rank == 1 else ""
+
+        rows.append(
+            f'<tr class="row{top}">'
+            f'<td class="rank">{rank}</td>'
+            f'<td class="model-cell">{_esc(m["display_name"])}</td>'
+            f'<td class="maker-cell">{_esc(m.get("maker", ""))}</td>'
+            f'<td class="num">{_pct(acc)}</td>'
+            f'<td class="num"><span class="big">{index}</span></td>'
+            f'<td><span class="tend"><span class="dot-i" style="background:{tend_color}"></span>'
+            f"{_esc(tend_label)}</span></td>"
+            f'<td class="num">{int(raw.get("n_items", 0))}</td>'
+            "</tr>"
+        )
+        cards.append(
+            f'<figure class="card{top}">'
+            f"<h3>{_esc(m['display_name'])}</h3>"
+            f'<p class="meta">{_esc(m.get("maker", ""))} &middot; accuracy {_pct(acc)} '
+            f"&middot; calibration index {index}</p>"
+            f"{_reliability_svg(d.get('reliability', []), _slug(m['id']))}"
+            '<figcaption>Each dot groups answers given at a similar confidence; its size reflects '
+            "how many. On the dashed line, confidence matched accuracy. Below it the model was "
+            "overconfident; above it, underconfident.</figcaption>"
+            "</figure>"
+        )
+
+        ci = d.get("ci")
+        ci_txt = f"{_fmt(ci[0], 2)} – {_fmt(ci[1], 2)}" if ci else "—"
+        tech_rows.append(
+            "<tr>"
+            f"<td>{_esc(m['display_name'])}</td>"
+            f"<td>{_esc(m.get('maker', ''))}</td>"
+            f'<td class="num">{_fmt(raw.get("accuracy"), 3)}</td>'
+            f'<td class="num">{_fmt(raw.get("ece"), 3)}</td>'
+            f'<td class="num">{_fmt(raw.get("brier"), 3)}</td>'
+            f'<td class="num">{_fmt(score, 3)}</td>'
+            f'<td class="num">{ci_txt}</td>'
+            f'<td class="num">{int(raw.get("n_items", 0))}</td>'
+            "</tr>"
+        )
+
+    technical = (
+        '<details class="tech"><summary>Show the full technical detail</summary>'
+        '<div class="tablewrap"><table>'
+        "<thead><tr><th>Model</th><th>Maker</th><th class='num'>Accuracy</th>"
+        "<th class='num'>ECE</th><th class='num'>Brier</th><th class='num'>Score (1−ECE)</th>"
+        "<th class='num'>95% range</th><th class='num'>n</th></tr></thead>"
+        f"<tbody>{''.join(tech_rows)}</tbody></table></div>"
+        '<p class="glossary"><b>Calibration index</b> is <b>1 − ECE</b> rescaled to 0–100. '
+        "<b>ECE</b> (expected calibration error) is the average gap between how confident the "
+        "model said it was and how often it was actually right. <b>Brier</b> is a companion error "
+        "score on each answer; <b>accuracy</b> is the share of questions answered correctly. The "
+        "<b>95% range</b> is a bootstrap interval; read it as a spread indicator. Full method: "
+        "<code>methodology/calibration.md</code>.</p>"
+        "</details>"
+    )
+
+    return (
+        '<section>'
+        '<p class="kicker">Measured now &middot; Calibration</p>'
+        "<h2>Does the model know what it knows?</h2>"
+        '<p class="lede">We ask 30 multiple-choice factual questions and require each model to '
+        "state, as a percentage, how sure it is. A well-calibrated model is right about as often "
+        "as it claims — a model that is 90% sure should be correct roughly nine times in ten. We "
+        "then compare stated confidence against actual accuracy.</p>"
+        '<div class="tablewrap"><table class="board">'
+        "<thead><tr>"
+        "<th>#</th><th>Model</th><th>Developer</th>"
+        "<th class='num'>Accuracy</th>"
+        "<th class='num'>Calibration<br><span class='unit'>index, 0–100</span></th>"
+        "<th>Confidence</th><th class='num'>Questions</th>"
+        "</tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+        '<div class="cards">' + "".join(cards) + "</div>"
+        f"{technical}"
+        "</section>"
+    )
+
+
+def _virtue_section(report: dict, vkey: str) -> str:
+    """Editorial section for any scored, non-calibration virtue (sycophancy now;
+    creator-bias / framing / clarity automatically when implemented)."""
+    virtue = report.get("virtues", {}).get(vkey)
+    if not virtue:
+        return ""
+    info = VIRTUE_BY_KEY.get(
+        vkey,
+        {"title": _title(vkey), "q": _title(vkey), "score_label": "Score",
+         "blurb": virtue.get("definition", "")},
+    )
+    by_model = virtue["by_model"]
+    models = report.get("models", [])
+    entries = [
+        (m, by_model[m["id"]])
+        for m in models
+        if m["id"] in by_model and by_model[m["id"]].get("score") is not None
+    ]
+    if not entries:
+        return ""
+    entries.sort(key=lambda md: md[1].get("score") or -1.0, reverse=True)
+
+    plain = info.get("plain")  # (raw_key, label, kind) | None
+    cols = sorted({c for _, d in entries for c in d.get("raw", {}) if c != "n_items"})
+
+    rows, tech_rows = [], []
+    for rank, (m, d) in enumerate(entries, start=1):
+        raw = d.get("raw", {})
+        score = d.get("score")
+        index = "—" if score is None else f"{round(float(score) * 100)}"
+        top = " top" if rank == 1 else ""
+        plain_cell = ""
+        if plain:
+            val = raw.get(plain[0])
+            plain_cell = f'<td class="num">{_pct(val) if plain[2] == "pct" else _fmt(val, 3)}</td>'
+        rows.append(
+            f'<tr class="row{top}">'
+            f'<td class="rank">{rank}</td>'
+            f'<td class="model-cell">{_esc(m["display_name"])}</td>'
+            f'<td class="maker-cell">{_esc(m.get("maker", ""))}</td>'
+            f'<td class="num"><span class="big">{index}</span></td>'
+            f"{plain_cell}"
+            f'<td class="num">{int(raw.get("n_items", 0))}</td>'
+            "</tr>"
+        )
+        ci = d.get("ci")
+        ci_txt = f"{_fmt(ci[0], 2)} – {_fmt(ci[1], 2)}" if ci else "—"
+        tech_rows.append(
+            "<tr>"
+            f"<td>{_esc(m['display_name'])}</td><td>{_esc(m.get('maker', ''))}</td>"
+            f'<td class="num">{_fmt(score, 3)}</td>'
+            + "".join(f'<td class="num">{_fmt(raw.get(c), 3)}</td>' for c in cols)
+            + f'<td class="num">{ci_txt}</td><td class="num">{int(raw.get("n_items", 0))}</td>'
+            "</tr>"
+        )
+
+    plain_head = f"<th class='num'>{_esc(plain[1])}</th>" if plain else ""
+    tech_head = (
+        "<tr><th>Model</th><th>Maker</th><th class='num'>Score</th>"
+        + "".join(f"<th class='num'>{_esc(c.replace('_', ' '))}</th>" for c in cols)
+        + "<th class='num'>95% range</th><th class='num'>n</th></tr>"
+    )
+    gloss = TECH_GLOSSARY.get(vkey) or (
+        f"{_esc(virtue.get('definition', ''))}. The published score is normalised to 0–100, "
+        "higher is better."
+    )
+    technical = (
+        '<details class="tech"><summary>Show the full technical detail</summary>'
+        '<div class="tablewrap"><table><thead>' + tech_head + "</thead>"
+        f"<tbody>{''.join(tech_rows)}</tbody></table></div>"
+        f'<p class="glossary">{gloss}</p></details>'
+    )
+    return (
+        '<section>'
+        f'<p class="kicker">Measured now &middot; {_esc(info["title"])}</p>'
+        f'<h2>{_esc(info["q"])}</h2>'
+        f'<p class="lede">{_esc(info["blurb"])}</p>'
+        '<div class="tablewrap"><table class="board"><thead><tr>'
+        "<th>#</th><th>Model</th><th>Developer</th>"
+        f"<th class='num'>{_esc(info.get('score_label', 'Score'))}<br>"
+        "<span class='unit'>index, 0–100</span></th>"
+        f"{plain_head}<th class='num'>Questions</th>"
+        "</tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></div>"
+        f"{technical}"
+        "</section>"
+    )
+
+
+_STYLE = """
+:root{
+  color-scheme: light;
+  --ink:#141414; --ink-soft:#5c574f; --ink-faint:#8a847a;
+  --paper:#ffffff; --wash:#fbf8f4; --wash-warm:#fdf4ec;
+  --rule:#e7e2da; --rule-strong:#d6cfc4;
+  --ember-deep:#9c3b13; --ember:#c2520f; --ember-bright:#e07a36;
+  --ember-glow:#f4a563; --ember-pale:#f3d6bd;
+  --serif: Georgia,"Times New Roman",Times,serif;
+  --sans:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--serif);font-size:18px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+.skybg{background:linear-gradient(180deg,var(--wash-warm) 0%,#fdf8f3 42%,var(--paper) 100%);}
+.wrap{max-width:880px;margin:0 auto;padding:0 22px 30px;}
+a{color:var(--ember-deep);text-decoration:underline;text-underline-offset:2px;}
+.kicker{font-family:var(--sans);font-weight:700;font-size:12px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--ember-deep);margin:0 0 8px;}
+.rule-ombre{height:3px;border:0;margin:0;
+  background:linear-gradient(90deg,var(--ember-deep) 0%,var(--ember) 22%,
+    var(--ember-bright) 46%,var(--ember-glow) 66%,rgba(244,165,99,0) 100%);}
+.footnote{font-family:var(--sans);font-size:12.5px;line-height:1.6;
+  color:var(--ink-faint);margin:18px 0 0;max-width:680px;}
+/* masthead */
+.topbar{display:flex;justify-content:space-between;align-items:center;
+  font-family:var(--sans);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--ink-faint);padding:16px 0 13px;border-bottom:1px solid var(--rule-strong);}
+.topbar .brand{color:var(--ink);font-weight:700;}
+.masthead{text-align:center;padding:40px 0 26px;}
+.eyebrow{font-family:var(--sans);font-size:12px;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ember);margin:0 0 14px;}
+.nameplate{font-family:var(--serif);font-weight:700;letter-spacing:-.015em;
+  font-size:58px;line-height:1.0;margin:0 0 8px;}
+.nameplate .em{background:linear-gradient(90deg,var(--ember-deep),var(--ember-bright));
+  -webkit-background-clip:text;background-clip:text;color:transparent;}
+.standfirst{font-size:21px;line-height:1.5;color:var(--ink-soft);font-style:italic;
+  max-width:640px;margin:16px auto 18px;}
+.dateline{font-family:var(--sans);font-size:11.5px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--ink-faint);}
+/* demo banner */
+.banner{font-family:var(--sans);font-size:14px;line-height:1.5;
+  background:var(--wash-warm);border:1px solid var(--ember-pale);
+  border-left:4px solid var(--ember);color:#6b2c0c;
+  padding:13px 17px;border-radius:3px;margin:26px 0 0;}
+.banner b{color:var(--ember-deep);}
+/* callout */
+.callout{background:var(--wash);border-left:3px solid var(--ember-bright);
+  padding:18px 22px;margin:34px 0 4px;border-radius:0 3px 3px 0;}
+.callout h3{font-family:var(--sans);font-size:12.5px;letter-spacing:.07em;
+  text-transform:uppercase;margin:0 0 7px;color:var(--ink);}
+.callout p{margin:0;font-size:18px;color:var(--ink-soft);}
+/* sections */
+section{margin:50px 0 0;}
+h2{font-family:var(--serif);font-weight:700;font-size:31px;line-height:1.12;
+  letter-spacing:-.012em;margin:8px 0 8px;}
+.lede{font-size:18px;color:var(--ink-soft);margin:6px 0 24px;max-width:700px;}
+/* virtue overview */
+.virtues{display:grid;grid-template-columns:repeat(auto-fill,minmax(238px,1fr));
+  gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:4px;overflow:hidden;}
+.virtue{background:var(--paper);padding:18px 17px 19px;display:flex;flex-direction:column;}
+.virtue h4{font-family:var(--serif);font-size:19px;margin:0 0 6px;}
+.virtue p{font-family:var(--sans);font-size:13px;line-height:1.55;color:var(--ink-soft);
+  margin:0 0 14px;flex:1;}
+.pill{font-family:var(--sans);font-size:10px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;padding:4px 9px;border-radius:20px;align-self:flex-start;}
+.pill.live{background:linear-gradient(90deg,var(--ember-deep),var(--ember-bright));color:#fff;}
+.pill.soon{background:#efece6;color:var(--ink-faint);}
+/* tables */
+.tablewrap{overflow-x:auto;margin:6px 0 0;}
+table.board{border-collapse:collapse;width:100%;font-family:var(--sans);font-size:14.5px;}
+.board thead th{font-size:11px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--ink-faint);font-weight:700;text-align:left;padding:0 14px 9px;
+  border-bottom:2px solid var(--ink);vertical-align:bottom;}
+.board thead th .unit{font-weight:400;letter-spacing:.02em;text-transform:none;}
+.board .num{text-align:right;font-variant-numeric:tabular-nums;}
+.board tbody td{padding:14px;border-bottom:1px solid var(--rule);vertical-align:middle;}
+.board tbody tr:hover{background:var(--wash-warm);}
+.board tr.top td{background:linear-gradient(90deg,var(--wash-warm),transparent 70%);}
+.board tr.top:hover td{background:var(--wash-warm);}
+.rank{font-family:var(--serif);font-weight:700;font-size:21px;color:var(--ink-faint);width:1%;}
+.board tr.top .rank{color:var(--ember);}
+.model-cell{font-family:var(--serif);font-size:17px;font-weight:700;}
+.maker-cell{color:var(--ink-soft);}
+.big{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;}
+.tend{display:inline-flex;align-items:center;gap:8px;white-space:nowrap;}
+.dot-i{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none;}
+/* cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
+  gap:24px;margin:34px 0 0;}
+.card{border:1px solid var(--rule);border-radius:5px;padding:18px 18px 15px;background:var(--paper);margin:0;}
+.card.top{border-color:var(--ember-pale);box-shadow:0 2px 0 var(--ember-pale);}
+.card h3{font-family:var(--serif);font-size:20px;margin:0 0 2px;}
+.card .meta{font-family:var(--sans);font-size:12px;color:var(--ink-soft);margin:0 0 14px;}
+.card figcaption{font-family:var(--sans);font-size:11.5px;line-height:1.55;
+  color:var(--ink-faint);margin:10px 2px 0;}
+/* technical detail */
+details.tech{margin:34px 0 0;border-top:1px solid var(--rule);padding-top:16px;}
+details.tech summary{font-family:var(--sans);font-size:12.5px;font-weight:700;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--ember-deep);cursor:pointer;}
+details.tech table{border-collapse:collapse;width:100%;font-family:var(--sans);
+  font-size:13px;margin:16px 0 0;}
+details.tech th,details.tech td{padding:9px 12px;border-bottom:1px solid var(--rule);text-align:left;}
+details.tech th{color:var(--ink-faint);text-transform:uppercase;font-size:10.5px;letter-spacing:.05em;}
+details.tech td.num,details.tech th.num{text-align:right;font-variant-numeric:tabular-nums;}
+.glossary{font-family:var(--sans);font-size:13px;color:var(--ink-soft);
+  line-height:1.65;margin:16px 0 0;}
+.glossary b{color:var(--ink);}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  background:var(--wash-warm);color:var(--ember-deep);padding:1px 6px;border-radius:3px;font-size:.88em;}
+/* footer */
+footer{margin:64px 0 40px;border-top:2px solid var(--ink);padding-top:20px;
+  font-family:var(--sans);font-size:12.5px;line-height:1.7;color:var(--ink-soft);}
+footer .prov{color:var(--ink-faint);margin-top:10px;}
+@media (max-width:620px){
+  body{font-size:17px;} .nameplate{font-size:40px;} .standfirst{font-size:18px;}
+  h2{font-size:26px;} .topbar{font-size:9.5px;letter-spacing:.1em;}
+  .callout p{font-size:17px;}
+}
+"""
 
 
 def build_site(report_path: Path | str, out_dir: Path | str) -> Path:
@@ -187,59 +595,82 @@ def build_site(report_path: Path | str, out_dir: Path | str) -> Path:
 
     run = report.get("run", {})
     demo = report.get("demo", False)
+    date = _human_date(report.get("generated_at"))
+    bank = _esc(run.get("bank_version", "v?"))
+
     banner = (
-        '<div class="banner"><b>DEMO — synthetic data.</b> These numbers were produced by the '
-        "deterministic <code>mock</code> adapter for pipeline demonstration. They are NOT real model "
-        "results.</div>"
+        '<div class="banner"><b>Demonstration data — not real results.</b> '
+        "Every number on this page was produced by a deterministic stand-in model so the pipeline "
+        "can be shown end to end offline. It does not reflect how any real AI system performs.</div>"
         if demo
         else ""
     )
 
+    callout = (
+        '<div class="callout">'
+        "<h3>Why there is no single score</h3>"
+        "<p>These are different qualities, and bundling them into one ranking would invite gaming "
+        "and hide the trade-offs that matter. Each is reported on its own terms, with its method "
+        "documented in full — so a strong result on one measure can never paper over a weak one "
+        "elsewhere.</p>"
+        "</div>"
+    )
+
+    # Detailed sections: calibration (bespoke, with charts) then every other
+    # scored virtue (sycophancy now; more as they are implemented), in catalogue order.
+    other = "".join(
+        _virtue_section(report, v["key"]) for v in VIRTUES if v["key"] != "calibration"
+    )
+
     models_meta = ", ".join(
-        f"{_esc(m['display_name'])} (<code>{_esc(m.get('provider',''))}</code> · {_esc(m.get('version','') or 'n/a')})"
+        f"{_esc(m['display_name'])} ({_esc(m.get('provider', ''))} &middot; "
+        f"{_esc(m.get('version', '') or 'n/a')})"
         for m in report.get("models", [])
     )
 
-    models = report.get("models", [])
-    virtues = report.get("virtues", {})
-    # Other scored virtues (anything beyond calibration with a non-null score).
-    other_sections = []
-    implemented = {"calibration"}
-    for name, virtue in virtues.items():
-        if name == "calibration":
-            continue
-        if any(d.get("score") is not None for d in virtue.get("by_model", {}).values()):
-            implemented.add(name)
-            other_sections.append(f"<h2>{_esc(_title(name))}</h2>{_generic_virtue_section(virtue, models)}")
-    other_html = "".join(other_sections)
-    remaining = [v for v in ("creator_bias", "framing", "clarity") if v not in implemented]
-    remaining_txt = ", ".join(_title(v) for v in remaining) or "—"
+    footer = (
+        "<footer>"
+        '<p class="kicker">How this was produced</p>'
+        "<div>An open benchmark of epistemic behaviour in frontier language models. The public "
+        "test set is fully reproducible by anyone; a held-out private set guards against training "
+        "to the test. Methods live in <code>methodology/</code>; the full design is in "
+        "<code>SPEC.md</code>.</div>"
+        f'<div class="prov">Updated {_esc(date)} &middot; public test set <code>{bank}</code> '
+        f"&middot; run <code>{_esc(run.get('run_id', '?'))}</code> &middot; seed "
+        f"<code>{_esc(run.get('seed', '?'))}</code> &middot; code "
+        f"<code>{_esc(run.get('code_sha', '?'))}</code></div>"
+        f'<div class="prov">Models: {models_meta}</div>'
+        "</footer>"
+    )
 
     body = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>epistemic-bench — leaderboard</title>
+<title>epistemic-bench — how well do AI models reason?</title>
+<meta name="description" content="An open, journalist-friendly benchmark measuring whether leading AI models know the limits of their own knowledge, resist flattery, and stay consistent across framings.">
 <style>{_STYLE}</style></head>
-<body><div class="wrap">
-<h1>epistemic-bench</h1>
-<p class="sub">A per-virtue profile of epistemic behavior in frontier LLMs. No single composite score, by design.</p>
+<body>
+<div class="skybg"><div class="wrap">
+<div class="topbar"><span class="brand">epistemic-bench</span><span>Public test set {bank}</span></div>
+<div class="masthead">
+<p class="eyebrow">An open benchmark</p>
+<h1 class="nameplate">epistemic<span class="em">·</span>bench</h1>
+<p class="standfirst">How well do today's leading AI models reason about what they
+know? We test frontier systems for the habits that matter when machines inform the
+public — and publish the methodology in full.</p>
+<p class="dateline">Updated {_esc(date)} &middot; Public test set {bank}</p>
+</div>
+</div></div>
+<hr class="rule-ombre">
+<div class="wrap">
 {banner}
-<h2>Calibration</h2>
+{callout}
+{_virtue_overview(report)}
 {_calibration_section(report)}
-{other_html}
-<p class="legend">Remaining virtues ({_esc(remaining_txt)}) are specified in <code>SPEC.md</code> and
-scaffolded as stubs; they will appear here once implemented.</p>
-<footer>
-<div>{report.get('note','')}</div>
-<div style="margin-top:6px">Run <code>{_esc(run.get('run_id','?'))}</code> ·
-item bank <code>{_esc(run.get('bank_version','?'))}</code> ·
-seed <code>{_esc(run.get('seed','?'))}</code> ·
-code <code>{_esc(run.get('code_sha','?'))}</code> ·
-generated {_esc(report.get('generated_at','?'))}</div>
-<div style="margin-top:6px">Models: {models_meta}</div>
-<div style="margin-top:6px">Methodology: <code>methodology/calibration.md</code> · Design: <code>SPEC.md</code></div>
-</footer>
-</div></body></html>"""
+{other}
+{footer}
+</div>
+</body></html>"""
 
     path = out / "index.html"
     path.write_text(body, encoding="utf-8")
