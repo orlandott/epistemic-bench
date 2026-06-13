@@ -364,7 +364,7 @@ def _reliability_svg(bins: list[dict], gid: str, w: int = 300, h: int = 250) -> 
 
 
 _STATUS_PILL = {
-    "live": '<span class="pill live">Measured now</span>',
+    "live": '<span class="pill live">Published</span>',
     "withheld": '<span class="pill hold">Withheld pending validation</span>',
     "soon": '<span class="pill soon">In development</span>',
 }
@@ -394,7 +394,7 @@ def _virtue_overview(report: dict) -> str:
         '<p class="kicker">What we measure</p>'
         "<h2>The habits of an honest reasoner</h2>"
         '<p class="lede">Each quality is scored on its own and its method published in full — '
-        f"{n_live} measured here now, the rest built to the same standard. There is no blended "
+        f"{n_live} published here, the rest built to the same standard. There is no blended "
         "overall score, by design.</p>"
         f'<div class="virtues">{"".join(cells)}</div>'
         f"{foot}"
@@ -483,7 +483,7 @@ def _calibration_section(report: dict) -> str:
     nq = max((int(d.get("raw", {}).get("n_items", 0)) for _, d in entries), default=0)
     return (
         '<section>'
-        '<p class="kicker">Measured now &middot; Calibration</p>'
+        '<p class="kicker">Calibration</p>'
         "<h2>Does the model know what it knows?</h2>"
         f'<p class="lede">We ask {nq} multiple-choice factual questions and require each model to '
         "state, as a percentage, how sure it is. A well-calibrated model is right about as often "
@@ -578,7 +578,7 @@ def _virtue_section(report: dict, vkey: str) -> str:
     )
     return (
         '<section>'
-        f'<p class="kicker">Measured now &middot; {_esc(info["title"])}</p>'
+        f'<p class="kicker">{_esc(info["title"])}</p>'
         f'<h2>{_esc(info["q"])}</h2>'
         f'<p class="lede">{_esc(info["blurb"])}</p>'
         f"{_section_tags(report, virtue)}"
@@ -726,6 +726,13 @@ footer .prov{color:var(--ink-faint);margin-top:10px;}
   body{font-size:17px;} .nameplate{font-size:40px;} .standfirst{font-size:18px;}
   h2{font-size:26px;} .topbar{font-size:9.5px;letter-spacing:.1em;}
   .callout p{font-size:17px;}
+  /* Single-column on phones: the at-a-glance grid and each full description
+     stack into one tall column. Add a clear rule + breathing room above every
+     section so the brief overview reads as distinct from the detailed write-ups
+     below it, rather than running together. */
+  section{margin-top:38px;padding-top:30px;border-top:1px solid var(--rule-strong);}
+  section h2{margin-top:4px;}
+  .lede{margin-bottom:22px;}
 }
 """
 
