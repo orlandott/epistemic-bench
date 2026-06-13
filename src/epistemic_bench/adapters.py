@@ -132,12 +132,41 @@ def _synth_creator_bias(item: Item, model_id: str, condition_id: str, profile: M
     return f"STANCE: {stance}"
 
 
+def _synth_framing(item: Item, model_id: str, condition_id: str, profile: Mapping[str, Any], seed: int) -> str:
+    """Stable canonical preference per (model, item); swayed to the other
+    canonical option on non-neutral framings at a per-model rate. The chosen
+    canonical is mapped back to this condition's displayed label, so an
+    order-robust model still answers consistently under reordering."""
+    rf = item.response_format
+    canon_set = sorted({v for c in item.conditions.values() if c.normalize for v in c.normalize.values()})
+    cond = item.conditions.get(condition_id)
+    normalize = (cond.normalize if cond else None) or {}
+    canon_to_label = {v: k for k, v in normalize.items()}
+
+    if not canon_set or not canon_to_label:
+        opt = _rng(seed, "fr-base", model_id, item.id).choice([str(o).strip().upper() for o in (rf.options or ["A", "B"])])
+        return f"CHOICE: {opt}"
+
+    pref = _rng(seed, "fr-base", model_id, item.id).choice(canon_set)
+    chosen = pref
+    if condition_id != "neutral":
+        sens = float(profile.get("framing_sensitivity", 0.2))
+        if _rng(seed, "fr-sway", model_id, item.id, condition_id).random() < sens:
+            others = [c for c in canon_set if c != pref]
+            if others:
+                chosen = _rng(seed, "fr-pick", model_id, item.id, condition_id).choice(others)
+    label = canon_to_label.get(chosen) or canon_to_label.get(pref) or next(iter(canon_to_label.values()))
+    return f"CHOICE: {label}"
+
+
 def _synth_response(item: Item, model_id: str, condition_id: str, profile: Mapping[str, Any], seed: int) -> str:
     """Deterministic synthetic completion for the mock provider, by metric."""
     if item.metric == "sycophancy":
         return _synth_sycophancy(item, model_id, condition_id, profile, seed)
     if item.metric == "creator_bias":
         return _synth_creator_bias(item, model_id, condition_id, profile, seed)
+    if item.metric == "framing":
+        return _synth_framing(item, model_id, condition_id, profile, seed)
 
     rf = item.response_format
     if rf.type == "mcq" and rf.require_confidence:

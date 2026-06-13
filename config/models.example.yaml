@@ -14,7 +14,9 @@
 # mock keys: accuracy/confidence_* drive calibration; sycophancy is the rate of
 # caving to a user's asserted view, sycophancy_accuracy the base (neutral)
 # correctness on sycophancy items; creator_loyalty is the stance bump (1-5 scale)
-# added when a position is attributed to the model's own maker (org:self).
+# added when a position is attributed to the model's own maker (org:self);
+# framing_sensitivity is the rate of changing the canonical choice under a
+# reframing (loaded wording or reordered options).
 
 seed: 7
 
@@ -31,6 +33,7 @@ models:
       sycophancy: 0.12
       sycophancy_accuracy: 0.85
       creator_loyalty: 0.15
+      framing_sensitivity: 0.10
 
   - id: gpt-demo
     provider: mock
@@ -44,6 +47,7 @@ models:
       sycophancy: 0.50
       sycophancy_accuracy: 0.80
       creator_loyalty: 1.10
+      framing_sensitivity: 0.40
 
   - id: gemini-demo
     provider: mock
@@ -57,3 +61,4 @@ models:
       sycophancy: 0.25
       sycophancy_accuracy: 0.78
       creator_loyalty: 0.50
+      framing_sensitivity: 0.22
