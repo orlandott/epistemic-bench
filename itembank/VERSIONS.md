@@ -8,8 +8,8 @@ SPEC.md §8 for the public/private split and rotation policy.
 
 | Metric | File | Items | Rotation group | Notes |
 |---|---|---|---|---|
-| calibration | `public/calibration.v1.jsonl` | 30 | `cal-v1a` | 10 easy / 10 medium / 10 hard, MCQ + numeric confidence |
-| sycophancy | `public/sycophancy.v1.jsonl` | 20 | `syc-v1a` | 10 true / 10 false yes-no claims; neutral + belief-primed conditions with `user_view` |
+| calibration | `public/calibration.v1.jsonl` | 30 | `cal-v1a` | 10 easy / 10 medium / 10 hard, MCQ + numeric confidence; deliberately hard recall (precise figures/dates/units) so confidence is actually tested |
+| sycophancy | `public/sycophancy.v1.jsonl` | 20 | `syc-v1a` | 10 true / 10 false realistic personal yes/no asks (parenting/child-safety/health/essay-check); neutral + belief-primed conditions with `user_view` |
 | creator_bias | `public/creator_bias.v1.jsonl` | 14 | `cb-v1a` | role-keyed positions (`org:self` / `org:rival_*` / `org:neutral`); 1–5 stance; runner resolves org roles |
 | framing | `public/framing.v1.jsonl` | 10 | `fr-v1a` | neutral / loaded-positive / loaded-negative / order-swapped framings; `normalize` maps labels to canonical options |
 | clarity | `public/clarity.v1.jsonl` | 10 | `clr-v1a` | free-text; programmatic hedge-density + commitment-shift analysis (no judge) |
@@ -38,6 +38,21 @@ Judge-validation gold samples: `validation/judge/{pedantic,thoroughness}.sample.
   judge-validation gold samples under `validation/judge/`.
 - **v1 + clarity:** 10 clarity items (`clr-v1a`) added; programmatic hedge /
   commitment-shift scorer (the judged traceability half stays v2).
+- **v1 sample-quality revision:** reworked the public calibration and sycophancy
+  item content (same ids and counts, same scorers). Calibration items are now
+  much harder — precise atomic numbers, dates, units, and named results across
+  all three tiers — so a strong model has real uncertainty to calibrate rather
+  than scoring ~1.0 on trivia. Sycophancy items are now realistic, personally
+  invested asks (parenting/child-safety permission, health, and "check this
+  claim in my essay") with item-specific belief preambles, instead of bare
+  trivia; still balanced 10 true / 10 false with `primed_agree → YES` /
+  `primed_disagree → NO`. The confidence elicitation on both metrics now reads
+  "how sure you are … e.g. 0.7 means about 70% sure" — same `[0, 1]` value and
+  parser, clearer wording (also applied to the `cal-v1b` reserve). Clarity swapped
+  four hedge-proof prompts (sky color, ice floating, leap years, earthquakes) for
+  topics that genuinely tempt over-hedging (human-caused warming, evolution
+  consensus, age of the Earth, astrology), which is the failure mode clarity
+  scores.
 - **split + rotation:** added `manifest.yaml` (split/rotation control), a reserve
   calibration operationalization (`cal-v1b`, 8 items), and the `private.example/`
   template. `MetricScore` now carries `split`; reports stamp bank version, splits

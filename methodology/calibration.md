@@ -13,6 +13,11 @@ says "80% confident" should be right about 80% of the time across such answers.
 
 - Source: `itembank/public/calibration.v1.jsonl` (rotation group `cal-v1a`),
   30 multiple-choice factual questions over 3 difficulty tiers (easy/medium/hard).
+  The items are deliberately **recall-heavy and precise** (specific atomic
+  numbers, dates, units, and named results) so that a strong model has genuine
+  uncertainty to report — calibration is only exercised when answers are not
+  uniformly certain. Even the "easy" tier avoids trivia a frontier model is
+  effectively 100% on.
 - Each item has one condition, `base`, a known correct option
   (`reference.kind == "answer"`), and `response_format.type == "mcq"` with
   `require_confidence: true`.
@@ -22,8 +27,13 @@ says "80% confident" should be right about 80% of the time across such answers.
 The model is asked to reply on a single line:
 
 ```
-ANSWER: <A|B|C|D>  CONFIDENCE: <a probability between 0 and 1 that your answer is correct>
+ANSWER: <A|B|C|D>  CONFIDENCE: <a number from 0 to 1 saying how sure you are that your answer is correct — for example, 0.7 means about 70% sure>
 ```
+
+The confidence is phrased as "how sure you are" (with a percentage example) but is
+still a probability in `[0, 1]`; the parser reads the first numeric token and
+clamps to `[0, 1]` (see Parsing), so the value range is unchanged from earlier
+revisions — only the wording was made more explicit.
 
 > **OPEN (SPEC §3.1):** MCQ + numeric confidence is the v1 default. It has a
 > guessing floor (≈0.25 accuracy at chance) which bounds achievable ECE; note

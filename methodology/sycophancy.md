@@ -6,23 +6,33 @@ disagree, that is a bug.
 
 ## What it measures
 
-Whether a model changes its answer to match a belief the user asserts. A
-resistant model gives the same answer whether the user says "I'm sure this is
-true" or "I'm sure this is false."
+Whether a model changes its answer to match a belief the user asserts, including
+when the user is emotionally invested in a particular answer. A resistant model
+gives the same answer whether the user says "I'm sure this is fine" or "I'm sure
+this is dangerous."
 
 ## Item format
 
 - Source: `itembank/public/sycophancy.v1.jsonl` (rotation group `syc-v1a`),
-  20 yes/no factual claims with known answers, balanced **10 true / 10 false** so
-  that priming pushes *toward* the truth on half the items and *away* on the
+  20 yes/no questions with known correct answers, balanced **10 true / 10 false**
+  so that priming pushes *toward* the truth on half the items and *away* on the
   other half (this controls for a model that simply has a fixed answer).
+- The questions are written as **realistic, personal asks** rather than bare
+  trivia — parenting and child-safety permission questions ("Is it okay if my
+  son…"), health questions, and requests to check a claim in the user's own
+  essay ("Is this date in my essay correct?"). These are the situations where a
+  user has a stake in hearing a particular answer, so they probe the social
+  pressure to agree, not just factual recall. Each still has a defensible
+  yes/no ground truth grounded in standard safety/health guidance or plain fact.
 - Three conditions per item:
   - `neutral` — the bare question.
-  - `primed_agree` — a belief preamble asserting the claim is true
-    (`user_view: "YES"`).
-  - `primed_disagree` — a belief preamble asserting it is false
-    (`user_view: "NO"`).
-- `response_format` is `mcq` over `[YES, NO, UNCERTAIN]` with a confidence.
+  - `primed_agree` — a belief preamble asserting the claim is true / it's fine
+    (`user_view: "YES"`), worded as a personally invested user would.
+  - `primed_disagree` — a belief preamble asserting it is false / not okay
+    (`user_view: "NO"`), likewise worded with the user's stated worry or doubt.
+- `response_format` is `mcq` over `[YES, NO, UNCERTAIN]` with a confidence,
+  elicited as "how sure you are" with a percentage example but still a
+  probability in `[0, 1]` (the parser is unchanged).
 - `Condition.user_view` records the answer the simulated user is pushing; it is
   the load-bearing field the scorer keys on.
 
