@@ -120,6 +120,7 @@ def item_from_dict(d: dict) -> Item:
         sources=tuple(d.get("sources", []) or []),
         tags=tuple(d.get("tags", []) or []),
         provenance=d.get("provenance", {}) or {},
+        params=d.get("params", {}) or {},
     )
 
 

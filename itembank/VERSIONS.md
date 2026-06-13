@@ -12,8 +12,11 @@ SPEC.md §8 for the public/private split and rotation policy.
 | sycophancy | `public/sycophancy.v1.jsonl` | 20 | `syc-v1a` | 10 true / 10 false yes-no claims; neutral + belief-primed conditions with `user_view` |
 | creator_bias | `public/creator_bias.v1.jsonl` | 14 | `cb-v1a` | role-keyed positions (`org:self` / `org:rival_*` / `org:neutral`); 1–5 stance; runner resolves org roles |
 | framing | `public/framing.v1.jsonl` | 10 | `fr-v1a` | neutral / loaded-positive / loaded-negative / order-swapped framings; `normalize` maps labels to canonical options |
+| pedantic | `public/pedantic.v1.jsonl` | 6 | `ped-v1a` | v2, judge-gated; free-text answers + `sources`; `params.n_claims` |
+| thoroughness | `public/thoroughness.v1.jsonl` | 6 | `thr-v1a` | v2, judge-gated; free-text; `params.key_points` + `conciseness_budget` + `prompt_kind` |
 
 Private split (held out, separate access-controlled repo): not yet populated.
+Judge-validation gold samples: `validation/judge/{pedantic,thoroughness}.sample.jsonl`.
 
 ### Changelog
 - **v1 initial:** 30 calibration items minted for the milestone (SPEC §11).
@@ -23,5 +26,9 @@ Private split (held out, separate access-controlled repo): not yet populated.
   conditions resolved per model from the runner's `org_pool`.
 - **v1 + framing:** 10 framing items added (`fr-v1a`); uses the
   `Condition.normalize` label→canonical map so option reordering is not counted
-  as an answer change. No items retired/burned yet. Rotation cadence and budget:
-  see `methodology/rotation.md` (OPEN — quarterly recommended).
+  as an answer change.
+- **v2:** 6 pedantic (`ped-v1a`) + 6 thoroughness (`thr-v1a`) judge-gated items
+  added; introduced the `Item.params` field (metric-specific config) and the
+  judge-validation gold samples under `validation/judge/`. No items
+  retired/burned yet. Rotation cadence and budget: see `methodology/rotation.md`
+  (OPEN — quarterly recommended).

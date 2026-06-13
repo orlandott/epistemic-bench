@@ -34,6 +34,13 @@ models:
       sycophancy_accuracy: 0.85
       creator_loyalty: 0.15
       framing_sensitivity: 0.10
+      # v2 mock-judge quality profile
+      pedantic_precision: 0.92
+      pedantic_false_rate: 0.03
+      pedantic_ambiguity: 0.08
+      thoroughness_coverage: 0.85
+      thoroughness_balance: 0.88
+      thoroughness_verbosity: 0.05
 
   - id: gpt-demo
     provider: mock
@@ -48,6 +55,13 @@ models:
       sycophancy_accuracy: 0.80
       creator_loyalty: 1.10
       framing_sensitivity: 0.40
+      # v2 mock-judge quality profile
+      pedantic_precision: 0.80
+      pedantic_false_rate: 0.10
+      pedantic_ambiguity: 0.15
+      thoroughness_coverage: 0.78
+      thoroughness_balance: 0.80
+      thoroughness_verbosity: 0.30
 
   - id: gemini-demo
     provider: mock
@@ -62,3 +76,10 @@ models:
       sycophancy_accuracy: 0.78
       creator_loyalty: 0.50
       framing_sensitivity: 0.22
+      # v2 mock-judge quality profile
+      pedantic_precision: 0.85
+      pedantic_false_rate: 0.06
+      pedantic_ambiguity: 0.12
+      thoroughness_coverage: 0.82
+      thoroughness_balance: 0.83
+      thoroughness_verbosity: 0.15

@@ -16,17 +16,21 @@ import argparse
 import asyncio
 import subprocess
 import sys
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Sequence
 
+from . import validation as validation_mod
 from .adapters import build_adapters, load_models
 from .aggregate import aggregate, to_report
 from .itembank import load_items, validate_file
 from .jsonlio import read_json, read_jsonl, write_json, write_jsonl
 from .report import write_report
 from .runner import RunConfig, expand, run, run_id
-from .scoring import get_scorer  # noqa: F401  (import populates SCORERS)
+from .scoring import JUDGED_METRICS, get_scorer  # noqa: F401  (import populates SCORERS)
+from .scoring.judge.judge_client import make_mock_judge, make_real_judge
+from .scoring.judge.rubric import RUBRIC_VERSION
 from .site_build import build_site
 from .types import (
     ModelInfo,
@@ -40,6 +44,7 @@ from .types import (
 DEFAULT_MODELS = "config/models.example.yaml"
 DEFAULT_RUN_CONFIG = "config/run.example.yaml"
 DEFAULT_ITEMBANK = ["itembank/public"]
+DEFAULT_VALIDATION_DIR = "validation/judge"
 
 
 def _git_sha() -> str:
@@ -113,6 +118,8 @@ def do_run(
         "code_sha": _git_sha(),
         "n_units": len(units),
         "n_items": len(items),
+        "judge": rc.get("judge", {"id": "mock-judge-v1", "rubric_version": RUBRIC_VERSION}),
+        "mock_profiles": profiles,  # lets the score stage rebuild the mock judge
         "models": [
             {"id": m.id, "provider": m.provider, "maker": m.maker, "display_name": m.display_name, "version": m.version}
             for m in registry.values()
@@ -135,6 +142,16 @@ def do_score(run_dir: str | Path, itembank_roots: Optional[Sequence[str]] = None
         c = completion_from_dict(d)
         grouped.setdefault((c.item_id, c.model_id), {})[c.condition_id] = c
 
+    # Judge for v2 metrics: mock for demo runs, key-gated real judge otherwise.
+    if run_meta.get("demo"):
+        judge = make_mock_judge(
+            run_meta.get("mock_profiles", {}),
+            seed=int(run_meta.get("seed", 0)),
+            judge_id=run_meta.get("judge", {}).get("id", "mock-judge-v1"),
+        )
+    else:
+        judge = make_real_judge(run_meta.get("judge", {}).get("id", ""))
+
     scores = []
     skipped_metrics: set[str] = set()
     for (iid, mid), cmap in grouped.items():
@@ -146,11 +163,11 @@ def do_score(run_dir: str | Path, itembank_roots: Optional[Sequence[str]] = None
         except KeyError:
             skipped_metrics.add(item.metric)
             continue
-        ctx = ScoringContext(model=registry.get(mid, ModelInfo(mid, "mock", "", mid)))
+        ctx = ScoringContext(model=registry.get(mid, ModelInfo(mid, "mock", "", mid)), judge=judge)
         try:
             scores.append(scorer(item, cmap, ctx))
-        except NotImplementedError:
-            skipped_metrics.add(item.metric)
+        except (NotImplementedError, RuntimeError):
+            skipped_metrics.add(item.metric)  # stub, or judge not configured
 
     path = write_jsonl(run_dir / "scores.jsonl", (metricscore_to_dict(s) for s in scores))
     msg = f"[score] {len(scores)} scores -> {path}"
@@ -160,7 +177,7 @@ def do_score(run_dir: str | Path, itembank_roots: Optional[Sequence[str]] = None
     return path
 
 
-def do_aggregate(run_dir: str | Path) -> Path:
+def do_aggregate(run_dir: str | Path, validation_dir: str = DEFAULT_VALIDATION_DIR) -> Path:
     run_dir = Path(run_dir)
     run_meta = read_json(run_dir / "run_meta.json")
     registry = {m["id"]: modelinfo_from_dict(m) for m in run_meta["models"]}
@@ -168,13 +185,42 @@ def do_aggregate(run_dir: str | Path) -> Path:
     summaries = aggregate(
         scores, registry, seed=int(run_meta.get("seed", 0)), bank_version=run_meta.get("bank_version", "")
     )
-    report = to_report(summaries, run_meta, registry)
+
+    # Load judge-validation records for the publication gate (SPEC §10).
+    validation = {}
+    for metric in JUDGED_METRICS:
+        vr = validation_mod.load_result(validation_dir, metric)
+        if vr is not None:
+            validation[metric] = asdict(vr)
+
+    report = to_report(summaries, run_meta, registry, validation)
     path = write_report(report, run_dir)
     print(f"[aggregate] report -> {path}")
     _print_calibration_table(report)
     _print_sycophancy_table(report)
     _print_creator_bias_table(report)
     _print_framing_table(report)
+    _print_judged_tables(report)
+    return path
+
+
+def do_validate_judge(
+    metric: str,
+    sample_path: Optional[str] = None,
+    out_dir: str = DEFAULT_VALIDATION_DIR,
+    threshold: Optional[float] = None,
+    judge_id: str = "mock-judge-v1",
+) -> Path:
+    sample = sample_path or str(Path(out_dir) / f"{metric}.sample.jsonl")
+    result = validation_mod.run_validation(
+        metric, sample, threshold=threshold, judge_id=judge_id, rubric_version=RUBRIC_VERSION
+    )
+    path = validation_mod.write_result(result, out_dir)
+    status = "PASS ✓ (publishable)" if result.passed else "FAIL ✗ (withheld)"
+    print(
+        f"[validate-judge] {metric}: {result.agreement_metric}={result.agreement_value} "
+        f"vs threshold {result.threshold} on n={result.n} -> {status}"
+    )
     return path
 
 
@@ -270,6 +316,32 @@ def _print_framing_table(report: dict) -> None:
     print()
 
 
+def _print_judged_tables(report: dict) -> None:
+    for metric in ("pedantic", "thoroughness"):
+        v = report.get("virtues", {}).get(metric)
+        if not v:
+            continue
+        jv = v.get("judge", {})
+        print(
+            f"  {metric.title()} (v2 — judge-validated, "
+            f"{jv.get('agreement_metric')}={jv.get('agreement_value')} >= {jv.get('threshold')}):"
+        )
+        print(f"  {'model':<18} {'score':>6}")
+        for m in report.get("models", []):
+            d = v["by_model"].get(m["id"])
+            if d:
+                print(f"  {m['display_name'][:18]:<18} {(d.get('score') or 0):>6.3f}")
+        if report.get("demo"):
+            print("  [demo: synthetic mock judge — not real model results]")
+        print()
+    for metric, w in report.get("withheld", {}).items():
+        val = w.get("validation") or {}
+        detail = (
+            f" ({val.get('agreement_metric')}={val.get('agreement_value')} < {val.get('threshold')})" if val else ""
+        )
+        print(f"  [withheld] {metric}: not on leaderboard — {w.get('reason')}{detail}\n")
+
+
 # ---- argparse glue ---------------------------------------------------------
 
 
@@ -298,7 +370,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     prp.add_argument("--run", required=True)
     prp.add_argument("--site", default="site/out")
 
-    pd = sub.add_parser("demo", help="run -> score -> aggregate -> report (defaults)")
+    pvj = sub.add_parser("validate-judge", help="validate a v2 judge vs a human-labeled sample (SPEC §10)")
+    pvj.add_argument("--metric", required=True, choices=sorted(JUDGED_METRICS))
+    pvj.add_argument("--sample", default=None)
+    pvj.add_argument("--out", default=DEFAULT_VALIDATION_DIR)
+    pvj.add_argument("--threshold", type=float, default=None)
+
+    pd = sub.add_parser("demo", help="run -> score -> validate-judge -> aggregate -> report (defaults)")
     pd.add_argument("--models", default=DEFAULT_MODELS)
     pd.add_argument("--run-config", default=DEFAULT_RUN_CONFIG)
     pd.add_argument("--itembank", nargs="*", default=DEFAULT_ITEMBANK)
@@ -338,9 +416,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.cmd == "report":
         do_report(args.run, args.site)
         return 0
+    if args.cmd == "validate-judge":
+        do_validate_judge(args.metric, args.sample, args.out, args.threshold)
+        return 0
     if args.cmd == "demo":
         run_dir = do_run(args.models, args.run_config, args.itembank, args.out, args.metric)
         do_score(run_dir)
+        for metric in sorted(JUDGED_METRICS):
+            do_validate_judge(metric)
         do_aggregate(run_dir)
         do_report(run_dir, args.site)
         return 0

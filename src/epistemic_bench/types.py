@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path  # noqa: F401  (referenced in type hints elsewhere)
-from typing import Any, Literal, Mapping, Optional, Sequence
+from typing import Any, Callable, Literal, Mapping, Optional, Sequence
 
 ItemId = str  # "calibration/v1/cal-0007"
 ConditionId = str  # "base", "neutral", "org:self"
@@ -60,6 +60,7 @@ class Item:
     sources: Sequence[Mapping[str, str]] = field(default_factory=tuple)
     tags: Sequence[str] = field(default_factory=tuple)
     provenance: Mapping[str, Any] = field(default_factory=dict)
+    params: Mapping[str, Any] = field(default_factory=dict)  # metric-specific config (e.g. thoroughness key_points)
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,9 @@ class ScoringContext:
     model: ModelInfo
     rng_seed: int = 0
     extra: Mapping[str, Any] = field(default_factory=dict)
+    # Injected judge for v2 metrics (sync: JudgeRequest -> verdict text). None for v1.
+    # See scoring/judge/judge_client.py. Kept loosely typed here to avoid an import cycle.
+    judge: Optional[Callable[..., str]] = None
 
 
 @dataclass(frozen=True)

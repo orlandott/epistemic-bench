@@ -20,6 +20,7 @@
     "tags": {"type": "array", "items": {"type": "string"}},
     "sources": {"type": "array", "items": {"type": "object"}},
     "provenance": {"type": "object"},
+    "params": {"type": "object"},
     "conditions": {
       "type": "object",
       "minProperties": 1,

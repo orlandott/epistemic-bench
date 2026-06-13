@@ -176,6 +176,7 @@ deliberately treated as load-bearing: it must express single-prompt items
 | `sources` | array | | Citations for ground truth `{title, url, quote}`. Needed for v2 claim-checking and clarity. |
 | `tags` | array | | Includes the **rotation tag** `rotation:<group>` (§8.2) and domain tags. |
 | `provenance` | object | | `{author, created, license, source}`. |
+| `params` | object | | Metric-specific config (e.g. thoroughness `key_points`, `conciseness_budget`, `prompt_kind`; pedantic `n_claims`). |
 
 `Condition` object:
 
@@ -564,6 +565,7 @@ class ScoringContext:
     model: ModelInfo
     rng_seed: int = 0
     extra: Mapping[str, Any] = field(default_factory=dict)
+    judge: Optional[Callable[..., str]] = None  # injected judge for v2 (JudgeRequest -> verdict text)
 
 
 @dataclass(frozen=True)
@@ -886,6 +888,16 @@ v2 score is published until it clears this gate:
    scorer is **registered and publishable only if agreement ≥ threshold**.
 4. **Re-validation on change.** Any change to rubric or judge model re-triggers
    the gate.
+
+**Implementation refinement.** Judged scorers are *registered and computed* like
+any other (so the validation harness and the score stage can run them), but the
+gate is enforced at **publish time**: `aggregate.to_report` includes a judged
+metric under `virtues` only if a passing `validation/judge/<metric>.result.json`
+exists, otherwise it is moved to `report.withheld`. This is the practical reading
+of "registered and publishable only if agreement ≥ threshold" — an unvalidated
+judge score is never published. The scorer↔judge boundary is a synchronous
+`JudgeFn(JudgeRequest) -> verdict text` injected via `ScoringContext.judge`, which
+keeps the scorers pure and unit-testable with a fake judge.
 
 > **OPEN — judge identity & self-judging.** Recommended: the judge **must not
 > share a maker** with the model under test (acute given the creator-bias

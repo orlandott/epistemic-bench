@@ -1,0 +1,12 @@
+{"id": "ped-val-01", "claim": "The Challenger broke apart 73 seconds after launch.", "human_verdict": "supported", "judge_verdict": "supported"}
+{"id": "ped-val-02", "claim": "An O-ring seal in a solid rocket booster failed.", "human_verdict": "supported", "judge_verdict": "supported"}
+{"id": "ped-val-03", "claim": "Cold temperatures reduced the O-ring's resilience.", "human_verdict": "supported", "judge_verdict": "supported"}
+{"id": "ped-val-04", "claim": "Scurvy is caused by a deficiency of vitamin C.", "human_verdict": "supported", "judge_verdict": "supported"}
+{"id": "ped-val-05", "claim": "Earth's axial tilt is about 23.4 degrees.", "human_verdict": "supported", "judge_verdict": "supported"}
+{"id": "ped-val-06", "claim": "Photosynthesis releases nitrogen as a byproduct.", "human_verdict": "unsupported", "judge_verdict": "supported"}
+{"id": "ped-val-07", "claim": "The sources state the exact launch-day air temperature in degrees.", "human_verdict": "unsupported", "judge_verdict": "unsupported"}
+{"id": "ped-val-08", "claim": "Vitamin C deficiency primarily affects the kidneys.", "human_verdict": "unsupported", "judge_verdict": "unsupported"}
+{"id": "ped-val-09", "claim": "Earth's distance from the Sun has no measurable effect on climate at all.", "human_verdict": "unsupported", "judge_verdict": "contradicted"}
+{"id": "ped-val-10", "claim": "The seasons are caused mainly by Earth's changing distance from the Sun.", "human_verdict": "contradicted", "judge_verdict": "contradicted"}
+{"id": "ped-val-11", "claim": "Antibiotics are an effective treatment for the common cold.", "human_verdict": "contradicted", "judge_verdict": "contradicted"}
+{"id": "ped-val-12", "claim": "Water boils at a lower temperature at higher altitude.", "human_verdict": "supported", "judge_verdict": "supported"}
