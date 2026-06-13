@@ -120,7 +120,7 @@ models:
   - id: deepseek-demo
     provider: mock
     maker: DeepSeek
-    display_name: "DeepSeek (demo)"
+    display_name: "DeepSeek-V4 (demo)"
     version: "demo-1"
     mock:
       accuracy: { easy: 0.90, medium: 0.75, hard: 0.53 }
