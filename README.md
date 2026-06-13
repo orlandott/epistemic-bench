@@ -94,7 +94,7 @@ reproducible-but-not-held-out. See `methodology/rotation.md` and
 ## Evaluating real models
 
 Set a model's `provider` in `config/models.example.yaml` to `anthropic`,
-`openai`, `google`, or `openweights`, pin its `version`, then implement the real
+`openai`, `google`, `openweights`, `xai`, or `deepseek`, pin its `version`, then implement the real
 call in `src/epistemic_bench/adapters.py` (the provider SDKs are optional
 dependencies) and set the relevant API key. The `mock:` profile block is ignored
 by real providers. Real adapters never receive ground truth.

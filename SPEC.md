@@ -533,7 +533,7 @@ class Item:
 @dataclass(frozen=True)
 class ModelInfo:
     id: ModelId
-    provider: Literal["anthropic", "openai", "google", "openweights"]
+    provider: Literal["anthropic", "openai", "google", "openweights", "xai", "deepseek"]
     maker: str           # org that built it; binds {{ORG_SELF}} for creator_bias
     display_name: str
     version: str = ""    # exact pinned version/date, recorded in provenance
@@ -607,6 +607,8 @@ ADAPTERS: dict[str, CallFn] = {
     "openai":      ...,   # stub
     "google":      ...,   # stub
     "openweights": ...,   # stub (local/hosted open-weight endpoint)
+    "xai":         ...,   # stub (Grok; OpenAI-compatible API)
+    "deepseek":    ...,   # stub (DeepSeek; OpenAI-compatible API)
 }
 
 def get_call_fn(provider: str) -> CallFn: ...

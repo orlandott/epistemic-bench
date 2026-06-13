@@ -66,7 +66,7 @@ class Item:
 @dataclass(frozen=True)
 class ModelInfo:
     id: ModelId
-    provider: Literal["anthropic", "openai", "google", "openweights", "mock"]
+    provider: Literal["anthropic", "openai", "google", "openweights", "xai", "deepseek", "mock"]
     maker: str  # org that built it; binds {{ORG_SELF}} for creator_bias
     display_name: str
     version: str = ""  # exact pinned version/date, recorded in provenance

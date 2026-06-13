@@ -41,6 +41,8 @@ ADAPTERS: dict[str, CallFn] = {
     "openai": _stub("openai", "openai", "OPENAI_API_KEY"),
     "google": _stub("google", "google-generativeai", "GOOGLE_API_KEY"),
     "openweights": _stub("openweights", "<your-runtime>", "OPENWEIGHTS_ENDPOINT"),
+    "xai": _stub("xai", "openai", "XAI_API_KEY"),
+    "deepseek": _stub("deepseek", "openai", "DEEPSEEK_API_KEY"),
 }
 
 
