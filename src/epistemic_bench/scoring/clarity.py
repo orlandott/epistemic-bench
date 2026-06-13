@@ -1,13 +1,13 @@
-"""Clarity scorer, programmatic part (SPEC §3.5) — IMPLEMENTED (no judge).
+"""Clarity scorer, programmatic part (SPEC §3.5). Implemented, no judge.
 
 Pure text analysis of the candidate answer on two programmatic signals:
 
-1. **Hedge density** — the fraction of vague, non-committal hedges ("sort of",
+1. **Hedge density**: the fraction of vague, non-committal hedges ("sort of",
    "arguably", "to some extent", ...). Calibrated probability language
-   ("probably", "70% likely") is deliberately NOT penalized here — expressing
-   honest uncertainty is what the *calibration* metric rewards. We penalize
-   vagueness, not quantified doubt.
-2. **Commitment shifts** — a confident claim that is then quietly walked back:
+   ("probably", "70% likely") is deliberately NOT penalized here, since
+   expressing honest uncertainty is what the *calibration* metric rewards. We
+   penalize vagueness, not quantified doubt.
+2. **Commitment shifts**: a confident claim that is then quietly walked back:
    a strong assertion ("definitely", "always") co-occurring with a possibility
    modal ("might", "could"), or a concessive connector ("but", "although")
    followed by such a modal.

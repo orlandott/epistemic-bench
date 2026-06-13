@@ -1,4 +1,4 @@
-"""Thoroughness scorer (SPEC §3, v2) — IMPLEMENTED, judge-gated.
+"""Thoroughness scorer (SPEC §3, v2). Implemented, judge-gated.
 
 Context-dependent coverage against a conciseness budget. The judge reports which
 of the item's key points the candidate substantively covers, an editorial

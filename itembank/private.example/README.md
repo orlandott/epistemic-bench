@@ -1,7 +1,7 @@
-# Private split — example template (SPEC §8.1)
+# Private split: example template (SPEC §8.1)
 
 This directory is an **example/template only**. The real private held-out split
-must NOT live in this public repository — it lives in a separate,
+must NOT live in this public repository; it lives in a separate,
 access-controlled repo (e.g. `epistemic-bench-private`) with this exact layout
 and schema. The items here are illustrative so maintainers can see the format and
 so the split machinery is testable end to end.

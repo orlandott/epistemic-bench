@@ -1,4 +1,4 @@
-"""Calibration scorer (SPEC §3.1, §7.5) — IMPLEMENTED for the v1 milestone.
+"""Calibration scorer (SPEC §3.1, §7.5). Implemented for the v1 milestone.
 
 Pointwise: reads the single ``base`` condition, returns correctness + stated
 confidence and the per-item Brier score. ECE and the reliability diagram are

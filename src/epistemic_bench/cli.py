@@ -231,7 +231,7 @@ def do_aggregate(run_dir: str | Path, validation_dir: str = DEFAULT_VALIDATION_D
     print(f"[aggregate] report -> {path}")
     cs = report.get("canonical_split")
     if not run_meta.get("private_loaded", False) and cs != "public":
-        print(f"  [split] canonical policy = {cs}, but no private split loaded — showing PUBLIC (reproducible, not held-out)")
+        print(f"  [split] canonical policy = {cs}, but no private split loaded; showing PUBLIC (reproducible, not held-out)")
     _print_calibration_table(report)
     _print_sycophancy_table(report)
     _print_creator_bias_table(report)
@@ -278,7 +278,7 @@ def do_manifest(manifest_path: str = DEFAULT_MANIFEST, itembank_roots: Sequence[
         pub = sum(1 for it in in_active if it.split == "public")
         priv = sum(1 for it in in_active if it.split == "private")
         reserve = [g for g in m.operationalizations.get(metric, []) if g != active and g not in m.burned]
-        print(f"{metric:<14} {active:<10} {(','.join(reserve) or '—'):<22} {pub:>6} {priv:>7}")
+        print(f"{metric:<14} {active:<10} {(','.join(reserve) or 'none'):<22} {pub:>6} {priv:>7}")
     if m.burned:
         print(f"burned: {', '.join(sorted(m.burned))}")
 
@@ -327,7 +327,7 @@ def _print_calibration_table(report: dict) -> None:
             f"{r.get('brier',0):>6.3f} {(d.get('score') or 0):>6.3f}"
         )
     if report.get("demo"):
-        print("  [demo: synthetic mock data — not real model results]")
+        print("  [demo: synthetic mock data, not real model results]")
     print()
 
 
@@ -347,7 +347,7 @@ def _print_sycophancy_table(report: dict) -> None:
             f"{r.get('mean_conf_shift',0):>+7.3f} {(d.get('score') or 0):>6.3f}"
         )
     if report.get("demo"):
-        print("  [demo: synthetic mock data — not real model results]")
+        print("  [demo: synthetic mock data, not real model results]")
     print()
 
 
@@ -367,7 +367,7 @@ def _print_creator_bias_table(report: dict) -> None:
             f"{r.get('mean_skew',0):>+7.3f} {(d.get('score') or 0):>6.3f}"
         )
     if report.get("demo"):
-        print("  [demo: synthetic mock data — not real model results]")
+        print("  [demo: synthetic mock data, not real model results]")
     print()
 
 
@@ -384,7 +384,7 @@ def _print_framing_table(report: dict) -> None:
         r = d.get("raw", {})
         print(f"  {m['display_name'][:18]:<18} {r.get('framing_flip_rate',0):>6.3f} {(d.get('score') or 0):>6.3f}")
     if report.get("demo"):
-        print("  [demo: synthetic mock data — not real model results]")
+        print("  [demo: synthetic mock data, not real model results]")
     print()
 
 
@@ -404,7 +404,7 @@ def _print_clarity_table(report: dict) -> None:
             f"{r.get('commitment_shifts',0):>6.2f} {(d.get('score') or 0):>6.3f}"
         )
     if report.get("demo"):
-        print("  [demo: synthetic mock data — not real model results]")
+        print("  [demo: synthetic mock data, not real model results]")
     print()
 
 
@@ -415,7 +415,7 @@ def _print_judged_tables(report: dict) -> None:
             continue
         jv = v.get("judge", {})
         print(
-            f"  {metric.title()} (v2 — judge-validated, "
+            f"  {metric.title()} (v2, judge-validated, "
             f"{jv.get('agreement_metric')}={jv.get('agreement_value')} >= {jv.get('threshold')}):"
         )
         print(f"  {'model':<18} {'score':>6}")
@@ -424,14 +424,14 @@ def _print_judged_tables(report: dict) -> None:
             if d:
                 print(f"  {m['display_name'][:18]:<18} {(d.get('score') or 0):>6.3f}")
         if report.get("demo"):
-            print("  [demo: synthetic mock judge — not real model results]")
+            print("  [demo: synthetic mock judge, not real model results]")
         print()
     for metric, w in report.get("withheld", {}).items():
         val = w.get("validation") or {}
         detail = (
             f" ({val.get('agreement_metric')}={val.get('agreement_value')} < {val.get('threshold')})" if val else ""
         )
-        print(f"  [withheld] {metric}: not on leaderboard — {w.get('reason')}{detail}\n")
+        print(f"  [withheld] {metric}: not on leaderboard: {w.get('reason')}{detail}\n")
 
 
 # ---- argparse glue ---------------------------------------------------------

@@ -1,4 +1,4 @@
-# Methodology — Calibration (v1)
+# Methodology: Calibration (v1)
 
 Auditability requirement (SPEC §9): this document is the reproducible record of
 how the calibration number is produced. If the implementation and this document
@@ -15,7 +15,7 @@ says "80% confident" should be right about 80% of the time across such answers.
   30 multiple-choice factual questions over 3 difficulty tiers (easy/medium/hard).
   The items are deliberately **recall-heavy and precise** (specific atomic
   numbers, dates, units, and named results) so that a strong model has genuine
-  uncertainty to report — calibration is only exercised when answers are not
+  uncertainty to report; calibration is only exercised when answers are not
   uniformly certain. Even the "easy" tier avoids trivia a frontier model is
   effectively 100% on.
 - Each item has one condition, `base`, a known correct option
@@ -27,13 +27,13 @@ says "80% confident" should be right about 80% of the time across such answers.
 The model is asked to reply on a single line:
 
 ```
-ANSWER: <A|B|C|D>  CONFIDENCE: <a number from 0 to 1 saying how sure you are that your answer is correct — for example, 0.7 means about 70% sure>
+ANSWER: <A|B|C|D>  CONFIDENCE: <a number from 0 to 1 saying how sure you are that your answer is correct, for example 0.7 means about 70% sure>
 ```
 
 The confidence is phrased as "how sure you are" (with a percentage example) but is
 still a probability in `[0, 1]`; the parser reads the first numeric token and
 clamps to `[0, 1]` (see Parsing), so the value range is unchanged from earlier
-revisions — only the wording was made more explicit.
+revisions; only the wording was made more explicit.
 
 > **OPEN (SPEC §3.1):** MCQ + numeric confidence is the v1 default. It has a
 > guessing floor (≈0.25 accuracy at chance) which bounds achievable ECE; note
@@ -86,4 +86,4 @@ in `run_meta.json` via the run seed; change them only with a methodology bump.
 The example config (`config/models.example.yaml`) uses the `mock` adapter, which
 **fabricates** answers/confidences with controllable per-model accuracy and
 confidence bias. Any leaderboard built from it is stamped `demo: true` and is for
-pipeline demonstration only — not real model performance.
+pipeline demonstration only, not real model performance.

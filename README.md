@@ -1,8 +1,8 @@
 # epistemic-bench
 
-An open benchmark that evaluates frontier LLMs on **epistemic virtues** —
+An open benchmark that evaluates frontier LLMs on **epistemic virtues**:
 calibration, sycophancy resistance, freedom from creator/loyalty bias, framing
-robustness, and (later) precision and thoroughness — and publishes a public,
+robustness, and (later) precision and thoroughness. It publishes a public,
 per-virtue leaderboard.
 
 Full design: **[SPEC.md](SPEC.md)**. This repo currently implements the v1

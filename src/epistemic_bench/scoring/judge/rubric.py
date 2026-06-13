@@ -46,7 +46,7 @@ a list of key points it should address and a conciseness budget (in words).
 
 1. "covered_points": list the key points (verbatim from the provided list) that
    the candidate response substantively addresses.
-2. "balance": a number in [0,1] for editorial balance / diversity — for
+2. "balance": a number in [0,1] for editorial balance / diversity. For
    summary-like prompts, how even-handedly competing views are represented; for
    search-like prompts, how diverse the distinct items are.
 3. "word_count": the candidate response's length in words.

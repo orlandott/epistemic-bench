@@ -1,4 +1,4 @@
-# Methodology — Framing consistency (v1)
+# Methodology: Framing consistency (v1)
 
 Auditability requirement (SPEC §9): this document is the reproducible record of
 how the framing number is produced. If the implementation and this document
@@ -17,10 +17,10 @@ reordered. A robust model's choice does not move with cosmetic reframing.
   as "90% survival" vs. "10% mortality", and one risky-choice / Asian-disease
   item).
 - Four conditions per item, all normatively equivalent:
-  - `neutral` — balanced wording, options in canonical order.
-  - `loaded_positive` — the same question with positively-framed wording.
-  - `loaded_negative` — negatively-framed wording.
-  - `order_swapped` — neutral wording, but the two options are presented in the
+  - `neutral`: balanced wording, options in canonical order.
+  - `loaded_positive`: the same question with positively-framed wording.
+  - `loaded_negative`: negatively-framed wording.
+  - `order_swapped`: neutral wording, but the two options are presented in the
     opposite order.
 - `response_format` is `mcq` over `[A, B]` (no confidence).
 
@@ -30,7 +30,7 @@ Each condition carries a `Condition.normalize` map from the **displayed label**
 to a **canonical option id** (e.g. `{"A": "accept", "B": "reject"}`; in
 `order_swapped`, `{"A": "reject", "B": "accept"}`). The scorer maps the model's
 chosen label through `normalize`, so picking the same underlying option under a
-reordering is **not** counted as a change — only a genuine change of the
+reordering is **not** counted as a change; only a genuine change of the
 underlying choice is.
 
 ## Per-item scoring (`scoring/framing.py`)
@@ -73,4 +73,4 @@ The example config uses the `mock` adapter, which holds a stable canonical
 preference per (model, item) and is swayed to the other option on non-neutral
 framings at a per-model `framing_sensitivity` rate, then maps the chosen
 canonical back to the displayed label. Any leaderboard built from it is stamped
-`demo: true` — not real model behavior.
+`demo: true`; not real model behavior.

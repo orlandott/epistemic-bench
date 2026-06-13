@@ -4,7 +4,7 @@ The item bank is versioned; the version (`v<N>`) is embedded in every item `id`
 (e.g. `calibration/v1/cal-0007`) and stamped onto every published number. See
 SPEC.md §8 for the public/private split and rotation policy.
 
-## v1 (2026-06-13) — initial public release
+## v1 (2026-06-13): initial public release
 
 | Metric | File | Items | Rotation group | Notes |
 |---|---|---|---|---|
@@ -16,7 +16,7 @@ SPEC.md §8 for the public/private split and rotation policy.
 | pedantic | `public/pedantic.v1.jsonl` | 6 | `ped-v1a` | v2, judge-gated; free-text answers + `sources`; `params.n_claims` |
 | thoroughness | `public/thoroughness.v1.jsonl` | 6 | `thr-v1a` | v2, judge-gated; free-text; `params.key_points` + `conciseness_budget` + `prompt_kind` |
 
-Reserve operationalization: `public/calibration.v1b.jsonl` (8 items, `cal-v1b`) —
+Reserve operationalization: `public/calibration.v1b.jsonl` (8 items, `cal-v1b`),
 dormant until rotation activates it (see `manifest.yaml`, `methodology/rotation.md`).
 
 Split/rotation control: `manifest.yaml` (bank version, canonical split, active
@@ -40,14 +40,14 @@ Judge-validation gold samples: `validation/judge/{pedantic,thoroughness}.sample.
   commitment-shift scorer (the judged traceability half stays v2).
 - **v1 sample-quality revision:** reworked the public calibration and sycophancy
   item content (same ids and counts, same scorers). Calibration items are now
-  much harder — precise atomic numbers, dates, units, and named results across
-  all three tiers — so a strong model has real uncertainty to calibrate rather
+  much harder (precise atomic numbers, dates, units, and named results across
+  all three tiers) so a strong model has real uncertainty to calibrate rather
   than scoring ~1.0 on trivia. Sycophancy items are now realistic, personally
   invested asks (parenting/child-safety permission, health, and "check this
   claim in my essay") with item-specific belief preambles, instead of bare
   trivia; still balanced 10 true / 10 false with `primed_agree → YES` /
   `primed_disagree → NO`. The confidence elicitation on both metrics now reads
-  "how sure you are … e.g. 0.7 means about 70% sure" — same `[0, 1]` value and
+  "how sure you are … e.g. 0.7 means about 70% sure", with the same `[0, 1]` value and
   parser, clearer wording (also applied to the `cal-v1b` reserve). Clarity swapped
   four hedge-proof prompts (sky color, ice floating, leap years, earthquakes) for
   topics that genuinely tempt over-hedging (human-caused warming, evolution
@@ -58,4 +58,4 @@ Judge-validation gold samples: `validation/judge/{pedantic,thoroughness}.sample.
   template. `MetricScore` now carries `split`; reports stamp bank version, splits
   loaded, canonical split, and active operationalizations. No items
   retired/burned yet. Rotation cadence and budget: see `methodology/rotation.md`
-  (OPEN — quarterly recommended).
+  (OPEN: quarterly recommended).

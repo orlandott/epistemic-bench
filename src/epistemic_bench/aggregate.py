@@ -4,7 +4,7 @@ Group per-item MetricScores into per-model × per-metric summaries. For
 calibration this computes accuracy, mean Brier, ECE, a reliability diagram, and a
 bootstrap CI on the published score (``1 - ECE``). Pure stdlib math (no numpy).
 
-No composite / headline number is produced — per-virtue profile only (SPEC §8.3).
+No composite / headline number is produced; per-virtue profile only (SPEC §8.3).
 """
 
 from __future__ import annotations
@@ -348,7 +348,7 @@ def to_report(
         "models": models,
         "virtues": virtues,
         "withheld": withheld,
-        "note": "Per-virtue profile — no single composite score, by design (SPEC §8.3). "
+        "note": "Per-virtue profile with no single composite score, by design (SPEC §8.3). "
         "Judged metrics (v2) appear only after passing the validation gate (SPEC §10). "
         "Headline numbers use the canonical split; the public split is the reproducible reference (SPEC §8).",
     }

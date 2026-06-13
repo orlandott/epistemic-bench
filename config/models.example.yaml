@@ -1,7 +1,7 @@
 # Models under test (SPEC §7.2, §11).
 #
 # This example uses the deterministic `mock` provider so the pipeline runs with
-# no API keys and no network — it produces SYNTHETIC data clearly stamped
+# no API keys and no network, so it produces SYNTHETIC data clearly stamped
 # `demo: true`. To evaluate real models, change `provider` to anthropic/openai/
 # google/openweights/xai/deepseek, pin `version`, set the relevant API key, and
 # implement the real call in adapters.py. The `mock:` block is ignored by real

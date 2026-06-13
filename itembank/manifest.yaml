@@ -1,4 +1,4 @@
-# Item-bank manifest (SPEC §8) — the control point for the public/private split
+# Item-bank manifest (SPEC §8): the control point for the public/private split
 # and operationalization rotation. The leaderboard stamps every number with the
 # bank version, the active operationalization, and the canonical split.
 #
