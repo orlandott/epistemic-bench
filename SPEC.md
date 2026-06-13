@@ -842,6 +842,19 @@ used for each number, so a score is never ambiguous about what it measured.
 > a fixed retire/promote/mint budget per metric. Confirm cadence and budget;
 > document both in `methodology/rotation.md`.
 
+### 8.2.1 Implemented as
+
+The split + rotation policy is realized by a machine-readable manifest
+(`itembank/manifest.yaml`): `bank_version`, `canonical_split`, and the `active`
+operationalization per metric (with reserve groups + a `burned` list). The loader
+takes multiple roots (public dir + private repo); `MetricScore` carries its
+item's `split`; the aggregator computes public and private numbers separately and
+`to_report` publishes the canonical split as the headline with the public number
+as `public_reference` (falling back to public, clearly labeled, if the private
+split is absent). Tooling: `epb manifest` (active vs reserve + split counts) and
+`epb rotate` (dry-run burn/promote/activate plan). Full policy:
+`methodology/rotation.md`.
+
 ### 8.3 No composite score (decision)
 
 Per the design decision in this session, the leaderboard publishes a

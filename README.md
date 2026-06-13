@@ -20,6 +20,10 @@ milestone (**calibration, end to end**) plus scaffolding and stubs for the rest.
 | Pedantic precision | v2 | ✅ implemented, judge-gated (published only if judge validated, SPEC §10) |
 | Thoroughness | v2 | ✅ implemented, judge-gated (published only if judge validated, SPEC §10) |
 
+Anti-Goodhart machinery (SPEC §8) is implemented too: a public/private split
+(private = canonical, anti-train-to-test) and operationalization rotation, both
+driven by `itembank/manifest.yaml` and stamped into every report.
+
 ## Quickstart (no install, no API keys)
 
 Requires Python ≥ 3.10 and PyYAML. Everything else is pure stdlib. The example
@@ -68,6 +72,25 @@ moved to `report.withheld` and never reaches the leaderboard. In demo mode the
 judge is a deterministic **mock** (stamped `demo: true`); the real judge is a
 key-gated stub. See `methodology/judge-validation.md`.
 
+## Public/private split & rotation (anti-Goodhart, SPEC §8)
+
+The headline (canonical) number is meant to come from a **private held-out split**
+in a separate access-controlled repo; the public split is the reproducible
+reference. `itembank/manifest.yaml` pins the bank version, the canonical split,
+and the **active operationalization** per metric (others are reserve, rotated in
+on later releases).
+
+```bash
+python -m epistemic_bench manifest    # active vs reserve groups + public/private counts
+python -m epistemic_bench rotate      # dry-run the next-release burn/promote/activate plan
+# eval with a private split (canonical):
+python -m epistemic_bench run --itembank itembank/public /path/to/private/items
+```
+
+With no private split loaded, the report falls back to public and labels it
+reproducible-but-not-held-out. See `methodology/rotation.md` and
+`itembank/private.example/`.
+
 ## Evaluating real models
 
 Set a model's `provider` in `config/models.example.yaml` to `anthropic`,
@@ -85,7 +108,9 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 ## Layout
 
 ```
-itembank/        versioned JSONL item bank (public split) + JSON Schema + version log
+itembank/        versioned JSONL item bank + manifest.yaml (split/rotation control) + JSON Schema
+  public/        public split (reproducible reference)
+  private.example/ template for the separate access-controlled private split
 src/epistemic_bench/
   types.py       core dataclasses
   itembank.py    load + validate JSONL
@@ -93,11 +118,12 @@ src/epistemic_bench/
   runner.py      expand conditions/org-roles, async+batched calls, dump completions
   scoring/       Scorer protocol + registry; v1 + v2 scorers
     judge/       v2 judge client, pinned rubrics, pedantic + thoroughness scorers
-  aggregate.py   per-model×metric summaries + bootstrap CI; v2 publication gate
+  aggregate.py   per-model×metric summaries + bootstrap CI; split + v2 publication gates
+  rotation.py    manifest, active-operationalization selection, rotation plan (SPEC §8)
   validation.py  judge-validation gate: Cohen's κ / Pearson r vs human sample
   report.py      report.json writer
   site_build.py  static leaderboard (inline-SVG reliability diagrams)
-  cli.py         epb: validate | run | score | aggregate | report | validate-judge | demo
+  cli.py         epb: validate | run | score | aggregate | report | validate-judge | manifest | rotate | demo
 config/          example models + run parameters (incl. judge thresholds)
 methodology/     reproducible per-metric methodology docs (auditability)
 validation/judge/ human-labeled gold samples for the judge gate (*.sample.jsonl)

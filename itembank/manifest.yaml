@@ -1,0 +1,42 @@
+# Item-bank manifest (SPEC §8) — the control point for the public/private split
+# and operationalization rotation. The leaderboard stamps every number with the
+# bank version, the active operationalization, and the canonical split.
+#
+# See methodology/rotation.md for the policy this encodes.
+
+bank_version: v1
+
+# Which split is the headline (canonical) number. The private split is the
+# anti-train-to-test surface; the public split is always reported alongside as
+# the reproducible reference. If the canonical split is absent at eval time, the
+# report falls back to public and labels it as reproducible-but-not-held-out.
+canonical_split: private        # OPEN (SPEC §8.1): private canonical, ~30/70 public/private
+
+# Groups retired from scoring because exposure may have contaminated them.
+burned: []
+
+rotation:
+  cadence: quarterly            # OPEN (SPEC §8.2)
+  release: v1
+  metrics:
+    calibration:
+      operationalizations: [cal-v1a, cal-v1b]   # cal-v1b is the reserve pool for the next rotation
+      active: cal-v1a
+    sycophancy:
+      operationalizations: [syc-v1a]
+      active: syc-v1a
+    creator_bias:
+      operationalizations: [cb-v1a]
+      active: cb-v1a
+    framing:
+      operationalizations: [fr-v1a]
+      active: fr-v1a
+    clarity:
+      operationalizations: [clr-v1a]
+      active: clr-v1a
+    pedantic:
+      operationalizations: [ped-v1a]
+      active: ped-v1a
+    thoroughness:
+      operationalizations: [thr-v1a]
+      active: thr-v1a

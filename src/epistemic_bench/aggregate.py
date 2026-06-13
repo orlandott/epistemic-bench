@@ -10,7 +10,7 @@ No composite / headline number is produced — per-virtue profile only (SPEC §8
 from __future__ import annotations
 
 import random
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Iterable, Mapping, Optional, Sequence
 
 from .types import MetricScore, ModelInfo
@@ -217,39 +217,50 @@ def aggregate(
     bank_version: str = "",
 ) -> list[ModelMetricSummary]:
     scores = list(scores)
-    grouped: dict[tuple[str, str], list[MetricScore]] = {}
+    # Group by split too, so the public (reproducible) and private (canonical)
+    # numbers are computed and stamped separately (SPEC §8).
+    grouped: dict[tuple[str, str, str], list[MetricScore]] = {}
     for s in scores:
-        grouped.setdefault((s.model_id, s.metric), []).append(s)
+        grouped.setdefault((s.model_id, s.metric, s.split), []).append(s)
 
     model_order = list(registry.keys()) if registry else sorted({s.model_id for s in scores})
     metrics = sorted({s.metric for s in scores})
+    splits_order = ["public", "private"]
+
+    def _one(metric, mid, grp) -> ModelMetricSummary:
+        if metric == "calibration":
+            return _calibration_summary(mid, grp, n_bins, seed, n_boot, bank_version)
+        if metric == "sycophancy":
+            return _sycophancy_summary(mid, grp, seed, n_boot, bank_version)
+        if metric == "creator_bias":
+            return _creator_bias_summary(mid, grp, seed, n_boot, bank_version)
+        if metric == "framing":
+            return _framing_summary(mid, grp, seed, n_boot, bank_version)
+        if metric in ("pedantic", "thoroughness", "clarity"):
+            return _mean_value_summary(mid, metric, grp, seed, n_boot, bank_version)
+        valid = [s for s in grp if s.valid]
+        raw = {"mean_value": round(sum(s.value for s in valid) / len(valid), 4) if valid else 0.0, "n_items": len(grp)}
+        return ModelMetricSummary(mid, metric, len(grp), None, raw, None, (), "public", bank_version)
 
     summaries: list[ModelMetricSummary] = []
     for metric in metrics:
-        for mid in model_order:
-            grp = grouped.get((mid, metric))
-            if not grp:
-                continue
-            if metric == "calibration":
-                summaries.append(_calibration_summary(mid, grp, n_bins, seed, n_boot, bank_version))
-            elif metric == "sycophancy":
-                summaries.append(_sycophancy_summary(mid, grp, seed, n_boot, bank_version))
-            elif metric == "creator_bias":
-                summaries.append(_creator_bias_summary(mid, grp, seed, n_boot, bank_version))
-            elif metric == "framing":
-                summaries.append(_framing_summary(mid, grp, seed, n_boot, bank_version))
-            elif metric in ("pedantic", "thoroughness", "clarity"):
-                summaries.append(_mean_value_summary(mid, metric, grp, seed, n_boot, bank_version))
-            else:
-                valid = [s for s in grp if s.valid]
-                raw = {
-                    "mean_value": round(sum(s.value for s in valid) / len(valid), 4) if valid else 0.0,
-                    "n_items": len(grp),
-                }
-                summaries.append(
-                    ModelMetricSummary(mid, metric, len(grp), None, raw, None, (), "public", bank_version)
-                )
+        for split in splits_order:
+            for mid in model_order:
+                grp = grouped.get((mid, metric, split))
+                if not grp:
+                    continue
+                summaries.append(replace(_one(metric, mid, grp), split=split))
     return summaries
+
+
+def _entry(s: ModelMetricSummary) -> dict:
+    return {
+        "score": s.score,
+        "ci": list(s.ci) if s.ci else None,
+        "raw": dict(s.raw),
+        "reliability": [asdict(b) for b in s.reliability] if s.reliability else [],
+        "split": s.split,
+    }
 
 
 def to_report(
@@ -257,57 +268,69 @@ def to_report(
     run_meta: Mapping,
     registry: Mapping[str, ModelInfo],
     validation: Optional[Mapping[str, Mapping]] = None,
+    canonical_split: str = "public",
 ) -> dict:
     """Assemble report.json: per-model × per-virtue profile + provenance.
 
     Publication gate (SPEC §10): a judged metric (pedantic, thoroughness) is
     included under ``virtues`` only if ``validation[metric]['passed']`` is true;
-    otherwise it is moved to ``withheld`` with the agreement record, so an
-    unvalidated judge score never reaches the leaderboard.
+    otherwise it is moved to ``withheld``.
+
+    Split policy (SPEC §8): the headline number per metric is the ``canonical_split``
+    if present (the private, anti-train-to-test surface), else public. The public
+    reproducible number is attached as ``public_reference`` when it differs.
     """
     from .scoring.base import JUDGED_METRICS
 
     validation = validation or {}
+    by_metric: dict[str, list[ModelMetricSummary]] = {}
+    for s in summaries:
+        by_metric.setdefault(s.metric, []).append(s)
+
     virtues: dict[str, dict] = {}
     withheld: dict[str, dict] = {}
 
-    for s in summaries:
-        vr = validation.get(s.metric)
-        gated = s.metric in JUDGED_METRICS
+    for metric, sums in by_metric.items():
+        splits_present = sorted({s.split for s in sums})
+        chosen = canonical_split if canonical_split in splits_present else "public"
+        if chosen not in splits_present:
+            chosen = splits_present[0] if splits_present else "public"
+        public_by_model = {s.model_id: s for s in sums if s.split == "public"}
+
+        vr = validation.get(metric)
+        gated = metric in JUDGED_METRICS
         published = (not gated) or bool(vr and vr.get("passed"))
-        entry = {
-            "score": s.score,
-            "ci": list(s.ci) if s.ci else None,
-            "raw": dict(s.raw),
-            "reliability": [asdict(b) for b in s.reliability] if s.reliability else [],
+
+        block = {
+            "direction": "higher_is_better",
+            "definition": DEFINITIONS.get(metric, ""),
+            "canonical_split": chosen,
+            "splits_available": splits_present,
+            "by_model": {},
         }
         if not published:
-            w = withheld.setdefault(
-                s.metric,
-                {
-                    "reason": "judge not validated (SPEC §10)" if vr is None else "judge validation below threshold",
-                    "definition": DEFINITIONS.get(s.metric, ""),
-                    "validation": dict(vr) if vr else None,
-                    "by_model": {},
-                },
-            )
-            w["by_model"][s.model_id] = entry
-            continue
-
-        v = virtues.setdefault(
-            s.metric,
-            {"direction": "higher_is_better", "definition": DEFINITIONS.get(s.metric, ""), "by_model": {}},
-        )
-        if gated and vr:
-            v["judge_validated"] = True
-            v["judge"] = {
+            block["reason"] = "judge not validated (SPEC §10)" if vr is None else "judge validation below threshold"
+            block["validation"] = dict(vr) if vr else None
+        elif gated and vr:
+            block["judge_validated"] = True
+            block["judge"] = {
                 "agreement_metric": vr.get("agreement_metric"),
                 "agreement_value": vr.get("agreement_value"),
                 "threshold": vr.get("threshold"),
                 "judge_id": vr.get("judge_id"),
                 "rubric_version": vr.get("rubric_version"),
             }
-        v["by_model"][s.model_id] = entry
+
+        for s in sums:
+            if s.split != chosen:
+                continue
+            entry = _entry(s)
+            if chosen != "public" and s.model_id in public_by_model:
+                pub = public_by_model[s.model_id]
+                entry["public_reference"] = {"score": pub.score, "ci": list(pub.ci) if pub.ci else None}
+            block["by_model"][s.model_id] = entry
+
+        (virtues if published else withheld)[metric] = block
 
     models = [
         {"id": m.id, "display_name": m.display_name, "maker": m.maker, "provider": m.provider, "version": m.version}
@@ -318,9 +341,14 @@ def to_report(
         "demo": bool(run_meta.get("demo", False)),
         "generated_at": run_meta.get("generated_at"),
         "run": dict(run_meta),
+        "bank_version": run_meta.get("bank_version"),
+        "canonical_split": canonical_split,
+        "splits_loaded": run_meta.get("splits_loaded", ["public"]),
+        "active_operationalizations": run_meta.get("active_operationalizations", {}),
         "models": models,
         "virtues": virtues,
         "withheld": withheld,
         "note": "Per-virtue profile — no single composite score, by design (SPEC §8.3). "
-        "Judged metrics (v2) appear only after passing the validation gate (SPEC §10).",
+        "Judged metrics (v2) appear only after passing the validation gate (SPEC §10). "
+        "Headline numbers use the canonical split; the public split is the reproducible reference (SPEC §8).",
     }

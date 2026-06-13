@@ -16,11 +16,12 @@ import argparse
 import asyncio
 import subprocess
 import sys
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Sequence
 
+from . import rotation as rotation_mod
 from . import validation as validation_mod
 from .adapters import build_adapters, load_models
 from .aggregate import aggregate, to_report
@@ -45,6 +46,7 @@ DEFAULT_MODELS = "config/models.example.yaml"
 DEFAULT_RUN_CONFIG = "config/run.example.yaml"
 DEFAULT_ITEMBANK = ["itembank/public"]
 DEFAULT_VALIDATION_DIR = "validation/judge"
+DEFAULT_MANIFEST = "itembank/manifest.yaml"
 
 
 def _git_sha() -> str:
@@ -75,14 +77,32 @@ def do_run(
     itembank_roots: Sequence[str],
     out_root: str,
     metric: Optional[str] = None,
+    manifest_path: Optional[str] = DEFAULT_MANIFEST,
+    rotate: bool = True,
 ) -> Path:
     registry, profiles, seed = load_models(models_path)
     rc = read_json(run_config_path) if (run_config_path and run_config_path.endswith(".json")) else _read_yaml(run_config_path)
-    items = load_items(*itembank_roots)
+    # Load both splits; the private split (if a private root is given) is the
+    # canonical anti-train-to-test surface (SPEC §8).
+    items = load_items(*itembank_roots, splits=("public", "private"))
+
+    manifest = None
+    canonical_split = "public"
+    active_ops: dict = {}
+    bank_version = _bank_version(items)
+    if manifest_path and Path(manifest_path).exists():
+        manifest = rotation_mod.load_manifest(manifest_path)
+        canonical_split = manifest.canonical_split
+        bank_version = manifest.bank_version
+        active_ops = dict(manifest.active)
+        if rotate:
+            # Score only the active operationalization; reserve/burned groups sit out.
+            items = rotation_mod.select_active(items, manifest)
+
     if metric:
         items = [it for it in items if it.metric == metric]
     if not items:
-        raise SystemExit("no items to run (check --itembank / --metric)")
+        raise SystemExit("no items to run (check --itembank / --metric / manifest active groups)")
 
     rid = run_id()
     run_dir = Path(out_root) / rid
@@ -101,12 +121,18 @@ def do_run(
     asyncio.run(run(units, adapters, registry, cfg))
 
     demo = any(m.provider == "mock" for m in registry.values())
+    splits_loaded = sorted({it.split for it in items}) or ["public"]
     run_meta = {
         "run_id": rid,
         "generated_at": _now(),
         "demo": demo,
         "itembank_roots": [str(r) for r in itembank_roots],
-        "bank_version": _bank_version(items),
+        "bank_version": bank_version,
+        "canonical_split": canonical_split,
+        "splits_loaded": splits_loaded,
+        "private_loaded": "private" in splits_loaded,
+        "split_counts": rotation_mod.split_counts(items),
+        "active_operationalizations": active_ops,
         "seed": seed,
         "params": {
             "concurrency": cfg.concurrency,
@@ -126,7 +152,12 @@ def do_run(
         ],
     }
     write_json(run_dir / "run_meta.json", run_meta)
-    print(f"[run] {len(units)} units across {len(registry)} models -> {run_dir}/completions.jsonl")
+    sc = run_meta["split_counts"]
+    print(
+        f"[run] {len(units)} units across {len(registry)} models "
+        f"(bank {bank_version}, splits public={sc.get('public',0)}/private={sc.get('private',0)}"
+        f"{', rotated to active operationalizations' if (manifest and rotate) else ''}) -> {run_dir}/completions.jsonl"
+    )
     return run_dir
 
 
@@ -134,7 +165,7 @@ def do_score(run_dir: str | Path, itembank_roots: Optional[Sequence[str]] = None
     run_dir = Path(run_dir)
     run_meta = read_json(run_dir / "run_meta.json")
     roots = list(itembank_roots) if itembank_roots else run_meta["itembank_roots"]
-    items_by_id = {it.id: it for it in load_items(*roots)}
+    items_by_id = {it.id: it for it in load_items(*roots, splits=("public", "private"))}
     registry = {m["id"]: modelinfo_from_dict(m) for m in run_meta["models"]}
 
     grouped: dict[tuple[str, str], dict] = {}
@@ -165,7 +196,7 @@ def do_score(run_dir: str | Path, itembank_roots: Optional[Sequence[str]] = None
             continue
         ctx = ScoringContext(model=registry.get(mid, ModelInfo(mid, "mock", "", mid)), judge=judge)
         try:
-            scores.append(scorer(item, cmap, ctx))
+            scores.append(replace(scorer(item, cmap, ctx), split=item.split))  # stamp the item's split
         except (NotImplementedError, RuntimeError):
             skipped_metrics.add(item.metric)  # stub, or judge not configured
 
@@ -193,9 +224,14 @@ def do_aggregate(run_dir: str | Path, validation_dir: str = DEFAULT_VALIDATION_D
         if vr is not None:
             validation[metric] = asdict(vr)
 
-    report = to_report(summaries, run_meta, registry, validation)
+    report = to_report(
+        summaries, run_meta, registry, validation, canonical_split=run_meta.get("canonical_split", "public")
+    )
     path = write_report(report, run_dir)
     print(f"[aggregate] report -> {path}")
+    cs = report.get("canonical_split")
+    if not run_meta.get("private_loaded", False) and cs != "public":
+        print(f"  [split] canonical policy = {cs}, but no private split loaded — showing PUBLIC (reproducible, not held-out)")
     _print_calibration_table(report)
     _print_sycophancy_table(report)
     _print_creator_bias_table(report)
@@ -230,6 +266,41 @@ def do_report(run_dir: str | Path, site_out: str) -> Path:
     out = build_site(run_dir / "report.json", site_out)
     print(f"[report] leaderboard -> {out}")
     return out
+
+
+def do_manifest(manifest_path: str = DEFAULT_MANIFEST, itembank_roots: Sequence[str] = DEFAULT_ITEMBANK) -> None:
+    m = rotation_mod.load_manifest(manifest_path)
+    items = load_items(*itembank_roots, splits=("public", "private"))
+    print(f"bank {m.bank_version} | canonical split: {m.canonical_split} | cadence: {m.cadence}")
+    print(f"{'metric':<14} {'active':<10} {'reserve':<22} {'public':>6} {'private':>7}")
+    for metric, active in m.active.items():
+        in_active = [it for it in items if it.metric == metric and rotation_mod.rotation_group_of(it) == active]
+        pub = sum(1 for it in in_active if it.split == "public")
+        priv = sum(1 for it in in_active if it.split == "private")
+        reserve = [g for g in m.operationalizations.get(metric, []) if g != active and g not in m.burned]
+        print(f"{metric:<14} {active:<10} {(','.join(reserve) or '—'):<22} {pub:>6} {priv:>7}")
+    if m.burned:
+        print(f"burned: {', '.join(sorted(m.burned))}")
+
+
+def do_rotate_plan(
+    manifest_path: str = DEFAULT_MANIFEST,
+    itembank_roots: Sequence[str] = DEFAULT_ITEMBANK,
+    burn_fraction: float = 0.25,
+) -> None:
+    m = rotation_mod.load_manifest(manifest_path)
+    items = load_items(*itembank_roots, splits=("public", "private"))
+    plan = rotation_mod.rotation_plan(items, m, burn_fraction=burn_fraction)
+    print(f"Rotation plan from release {plan['release_from']} (burn {int(burn_fraction*100)}% of active public items):\n")
+    for metric, p in plan["metrics"].items():
+        print(
+            f"  {metric:<14} active {p['active']:<9} burn {p['burn_n']:>2} of {p['n_public']:>2} public "
+            f"-> next active: {p['next_active']}"
+        )
+    print(
+        "\nMaintainer steps (see methodology/rotation.md): burn the listed public ids, promote fresh\n"
+        "private items into public to refill, mint new private items, then bump the manifest's active group."
+    )
 
 
 def _read_yaml(path: Optional[str]) -> dict:
@@ -376,9 +447,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     pr = sub.add_parser("run", help="call models, dump raw completions")
     pr.add_argument("--models", default=DEFAULT_MODELS)
     pr.add_argument("--run-config", default=DEFAULT_RUN_CONFIG)
-    pr.add_argument("--itembank", nargs="*", default=DEFAULT_ITEMBANK)
+    pr.add_argument("--itembank", nargs="*", default=DEFAULT_ITEMBANK, help="public dir, plus a private root at eval time")
     pr.add_argument("--out", default="runs")
     pr.add_argument("--metric", default=None)
+    pr.add_argument("--manifest", default=DEFAULT_MANIFEST)
+    pr.add_argument("--no-rotate", action="store_true", help="score all operationalizations, not just the active one")
 
     ps = sub.add_parser("score", help="completions -> per-item scores")
     ps.add_argument("--run", required=True)
@@ -396,6 +469,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     pvj.add_argument("--sample", default=None)
     pvj.add_argument("--out", default=DEFAULT_VALIDATION_DIR)
     pvj.add_argument("--threshold", type=float, default=None)
+
+    pm = sub.add_parser("manifest", help="show the item-bank manifest: active operationalizations + split counts")
+    pm.add_argument("--manifest", default=DEFAULT_MANIFEST)
+    pm.add_argument("--itembank", nargs="*", default=DEFAULT_ITEMBANK)
+
+    pro = sub.add_parser("rotate", help="dry-run the next-release rotation plan (SPEC §8.2)")
+    pro.add_argument("--manifest", default=DEFAULT_MANIFEST)
+    pro.add_argument("--itembank", nargs="*", default=DEFAULT_ITEMBANK)
+    pro.add_argument("--burn-fraction", type=float, default=0.25)
 
     pd = sub.add_parser("demo", help="run -> score -> validate-judge -> aggregate -> report (defaults)")
     pd.add_argument("--models", default=DEFAULT_MODELS)
@@ -426,7 +508,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
 
     if args.cmd == "run":
-        do_run(args.models, args.run_config, args.itembank, args.out, args.metric)
+        do_run(args.models, args.run_config, args.itembank, args.out, args.metric, args.manifest, not args.no_rotate)
+        return 0
+    if args.cmd == "manifest":
+        do_manifest(args.manifest, args.itembank)
+        return 0
+    if args.cmd == "rotate":
+        do_rotate_plan(args.manifest, args.itembank, args.burn_fraction)
         return 0
     if args.cmd == "score":
         do_score(args.run, args.itembank)

@@ -113,6 +113,7 @@ class MetricScore:
     diagnostics: Mapping[str, Any] = field(default_factory=dict)
     n_conditions: int = 0
     valid: bool = True
+    split: Split = "public"  # which item-bank split this item came from (SPEC §8)
 
 
 # ---- dict <-> dataclass helpers (JSONL round-tripping) --------------------
@@ -152,6 +153,7 @@ def metricscore_to_dict(s: MetricScore) -> dict:
         "diagnostics": dict(s.diagnostics),
         "n_conditions": s.n_conditions,
         "valid": s.valid,
+        "split": s.split,
     }
 
 
@@ -165,6 +167,7 @@ def metricscore_from_dict(d: Mapping[str, Any]) -> MetricScore:
         diagnostics=d.get("diagnostics", {}) or {},
         n_conditions=int(d.get("n_conditions", 0)),
         valid=bool(d.get("valid", True)),
+        split=d.get("split", "public"),
     )
 
 
