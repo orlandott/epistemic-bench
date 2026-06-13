@@ -1,0 +1,45 @@
+# Models under test (SPEC §7.2, §11).
+#
+# This example uses the deterministic `mock` provider so the pipeline runs with
+# no API keys and no network — it produces SYNTHETIC data clearly stamped
+# `demo: true`. To evaluate real models, change `provider` to anthropic/openai/
+# google/openweights, pin `version`, set the relevant API key, and implement the
+# real call in adapters.py. The `mock:` block is ignored by real providers.
+#
+# The three profiles below illustrate distinct calibration behaviors:
+#   - claude-demo  : near-calibrated
+#   - gpt-demo     : overconfident
+#   - gemini-demo  : underconfident
+
+seed: 7
+
+models:
+  - id: claude-demo
+    provider: mock
+    maker: Anthropic
+    display_name: "Claude (demo)"
+    version: "demo-1"
+    mock:
+      accuracy: { easy: 0.92, medium: 0.78, hard: 0.56 }
+      confidence_bias: 0.02
+      confidence_noise: 0.06
+
+  - id: gpt-demo
+    provider: mock
+    maker: OpenAI
+    display_name: "GPT (demo)"
+    version: "demo-1"
+    mock:
+      accuracy: { easy: 0.90, medium: 0.74, hard: 0.52 }
+      confidence_bias: 0.18
+      confidence_noise: 0.05
+
+  - id: gemini-demo
+    provider: mock
+    maker: Google
+    display_name: "Gemini (demo)"
+    version: "demo-1"
+    mock:
+      accuracy: { easy: 0.88, medium: 0.72, hard: 0.50 }
+      confidence_bias: -0.12
+      confidence_noise: 0.07

@@ -1,0 +1,14 @@
+# Runner parameters (SPEC §7.4).
+concurrency: 8
+batch_size: 16
+temperature: 0.0
+max_tokens: 256
+
+# Candidate maker names used to fill creator-bias org roles (SPEC §3.3, §4.4).
+# Unused by the calibration milestone.
+org_pool:
+  - Anthropic
+  - OpenAI
+  - Google
+  - Meta
+  - Mistral

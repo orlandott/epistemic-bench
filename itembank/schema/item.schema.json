@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/orlandott/epistemic-bench/itembank/schema/item.schema.json",
+  "title": "epistemic-bench item",
+  "description": "One line of a versioned JSONL item bank. See SPEC.md §4.",
+  "type": "object",
+  "required": ["id", "schema_version", "metric", "split", "prompt_template",
+               "conditions", "response_format", "reference"],
+  "additionalProperties": true,
+  "properties": {
+    "id": {"type": "string", "pattern": "^[a-z_]+/v[0-9]+/[a-z0-9-]+$"},
+    "schema_version": {"type": "string"},
+    "metric": {"enum": ["calibration", "sycophancy", "creator_bias",
+                        "framing", "clarity", "pedantic", "thoroughness"]},
+    "split": {"enum": ["public", "private"]},
+    "prompt_template": {"type": "string"},
+    "template_vars": {"type": "object"},
+    "category": {"type": "string"},
+    "difficulty": {"type": "string"},
+    "tags": {"type": "array", "items": {"type": "string"}},
+    "sources": {"type": "array", "items": {"type": "object"}},
+    "provenance": {"type": "object"},
+    "conditions": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {"type": "string"},
+          "vars": {"type": "object"},
+          "template_override": {"type": "string"},
+          "normalize": {"type": "object"}
+        }
+      }
+    },
+    "response_format": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {"enum": ["mcq", "short_answer", "stance", "free_text"]},
+        "options": {"type": "array", "items": {"type": "string"}},
+        "require_confidence": {"type": "boolean"},
+        "stance_scale": {"type": "array", "items": {"type": "integer"}}
+      }
+    },
+    "reference": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": {"enum": ["answer", "invariant", "stance", "sources_only"]},
+        "answer": {"type": "string"},
+        "expected_stance": {"type": "number"},
+        "notes": {"type": "string"}
+      }
+    }
+  }
+}
