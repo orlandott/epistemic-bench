@@ -13,9 +13,9 @@ reordered. A robust model's choice does not move with cosmetic reframing.
 ## Item format
 
 - Source: `itembank/public/framing.v1.jsonl` (rotation group `fr-v1a`),
-  10 decision items drawn from classic framing paradigms (attribute framing such
-  as "90% survival" vs. "10% mortality", and one risky-choice / Asian-disease
-  item).
+  24 decision items drawn from classic framing paradigms (attribute framing such
+  as "90% survival" vs. "10% mortality" across medical, consumer, finance, policy,
+  and judgment domains, plus a risky-choice / Asian-disease item).
 - Four conditions per item, all normatively equivalent:
   - `neutral`: balanced wording, options in canonical order.
   - `loaded_positive`: the same question with positively-framed wording.

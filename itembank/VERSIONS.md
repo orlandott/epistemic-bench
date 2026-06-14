@@ -11,10 +11,10 @@ SPEC.md §8 for the public/private split and rotation policy.
 | calibration | `public/calibration.v1.jsonl` | 30 | `cal-v1a` | 10 easy / 10 medium / 10 hard, MCQ + numeric confidence; deliberately hard recall (precise figures/dates/units) so confidence is actually tested |
 | sycophancy | `public/sycophancy.v1.jsonl` | 20 | `syc-v1a` | 10 true / 10 false realistic personal yes/no asks (parenting/child-safety/health/essay-check); neutral + belief-primed conditions with `user_view` |
 | creator_bias | `public/creator_bias.v1.jsonl` | 14 | `cb-v1a` | role-keyed positions (`org:self` / `org:rival_*` / `org:neutral`); 1–5 stance; runner resolves org roles |
-| framing | `public/framing.v1.jsonl` | 10 | `fr-v1a` | neutral / loaded-positive / loaded-negative / order-swapped framings; `normalize` maps labels to canonical options |
-| clarity | `public/clarity.v1.jsonl` | 10 | `clr-v1a` | free-text; programmatic hedge-density + commitment-shift analysis (no judge) |
-| pedantic | `public/pedantic.v1.jsonl` | 6 | `ped-v1a` | v2, judge-gated; free-text answers + `sources`; `params.n_claims` |
-| thoroughness | `public/thoroughness.v1.jsonl` | 6 | `thr-v1a` | v2, judge-gated; free-text; `params.key_points` + `conciseness_budget` + `prompt_kind` |
+| framing | `public/framing.v1.jsonl` | 24 | `fr-v1a` | neutral / loaded-positive / loaded-negative / order-swapped framings; `normalize` maps labels to canonical options |
+| clarity | `public/clarity.v1.jsonl` | 24 | `clr-v1a` | free-text; programmatic hedge-density + commitment-shift analysis (no judge) |
+| pedantic | `public/pedantic.v1.jsonl` | 18 | `ped-v1a` | v2, judge-gated; free-text answers + `sources`; `params.n_claims` |
+| thoroughness | `public/thoroughness.v1.jsonl` | 18 | `thr-v1a` | v2, judge-gated; free-text; `params.key_points` + `conciseness_budget` + `prompt_kind` |
 
 Reserve operationalization: `public/calibration.v1b.jsonl` (8 items, `cal-v1b`),
 dormant until rotation activates it (see `manifest.yaml`, `methodology/rotation.md`).
@@ -25,6 +25,12 @@ separate access-controlled repo; `private.example/` is the format template.
 Judge-validation gold samples: `validation/judge/{pedantic,thoroughness}.sample.jsonl`.
 
 ### Changelog
+- **v1 bank growth (2026-06-14):** widened the four thinnest banks so per-metric
+  bootstrap intervals tighten enough to support ranks — framing `10 → 24`,
+  clarity `10 → 24`, pedantic `6 → 18`, thoroughness `6 → 18`. New items keep the
+  same active rotation groups (`fr-v1a` / `clr-v1a` / `ped-v1a` / `thr-v1a`) and
+  formats; framing additions broaden domain coverage (medical, consumer, finance,
+  policy, judgment). No items retired.
 - **v1 initial:** 30 calibration items minted for the milestone (SPEC §11).
 - **v1 + sycophancy:** 20 sycophancy items added (`syc-v1a`); introduced the
   `Condition.user_view` field (the answer the simulated user asserts).

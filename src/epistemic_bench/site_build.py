@@ -427,11 +427,33 @@ def _reliability_svg(bins: list[dict], gid: str, w: int = 300, h: int = 250) -> 
     )
     pts = [b for b in bins if b.get("n", 0) > 0]
     if pts:
-        poly = " ".join(f"{px(b['mean_conf']):.1f},{py(b['accuracy']):.1f}" for b in pts)
-        P.append(
-            f'<polyline points="{poly}" fill="none" stroke="url(#{g})" '
-            'stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>'
-        )
+        # Confidence band: shaded ribbon spanning each bin's 95% accuracy interval
+        # (Wilson). It makes the sampling uncertainty visible instead of implying the
+        # bare line is the truth. Falls back to the point if no interval is present.
+        has_band = any(b.get("acc_hi", 0.0) > b.get("acc_lo", 0.0) for b in pts)
+        if has_band:
+            hi = [f"{px(b['mean_conf']):.1f},{py(b.get('acc_hi', b['accuracy'])):.1f}" for b in pts]
+            lo = [f"{px(b['mean_conf']):.1f},{py(b.get('acc_lo', b['accuracy'])):.1f}" for b in reversed(pts)]
+            P.append(
+                f'<polygon points="{" ".join(hi + lo)}" fill="#c2520f" fill-opacity="0.12" '
+                'stroke="none"/>'
+            )
+            for b in pts:
+                x = px(b["mean_conf"])
+                P.append(
+                    f'<line x1="{x:.1f}" y1="{py(b.get("acc_lo", b["accuracy"])):.1f}" '
+                    f'x2="{x:.1f}" y2="{py(b.get("acc_hi", b["accuracy"])):.1f}" '
+                    'stroke="#c2520f" stroke-opacity="0.45" stroke-width="1.1"/>'
+                )
+        # Suppress the connecting line when it would only join a couple of points —
+        # below that it reads as a trend that the data can't support. Equal-mass
+        # bins keep each plotted point comparably populated.
+        if len(pts) >= 3:
+            poly = " ".join(f"{px(b['mean_conf']):.1f},{py(b['accuracy']):.1f}" for b in pts)
+            P.append(
+                f'<polyline points="{poly}" fill="none" stroke="url(#{g})" '
+                'stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>'
+            )
         for b in pts:
             r = max(3.0, min(11.0, 1.7 * (b["n"] ** 0.5)))
             P.append(
@@ -1028,9 +1050,10 @@ def _calibration_section(report: dict) -> str:
             f"&middot; calibration index {index}</p>"
             f"{_reliability_svg(d.get('reliability', []), _slug(m['id']))}"
             "<figcaption>Stated confidence runs left to right; actual accuracy runs bottom to "
-            "top. Each dot groups answers given at a similar confidence, and its size reflects how "
-            "many. Dots on the dashed line are perfectly calibrated; below it the model was "
-            "overconfident, above it underconfident.</figcaption>"
+            "top. Each dot groups an equal share of answers by stated confidence, and its size "
+            "reflects how many; the shaded band is the 95% range for that group's accuracy. Dots "
+            "on the dashed line are perfectly calibrated; below it the model was overconfident, "
+            "above it underconfident.</figcaption>"
             "</figure>"
         )
 

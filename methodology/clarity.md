@@ -13,7 +13,7 @@ patterns), not a semantic judgment.
 ## Item format
 
 - Source: `itembank/public/clarity.v1.jsonl` (rotation group `clr-v1a`),
-  10 prompts asking for a short, direct answer (`response_format.type ==
+  24 prompts asking for a short, direct answer (`response_format.type ==
   "free_text"`). The scorer analyzes the response text only.
 
 ## Per-item scoring (`scoring/clarity.py`)

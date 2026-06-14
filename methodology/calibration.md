@@ -61,7 +61,16 @@ Across all valid items for a model:
 - **ECE** (Expected Calibration Error), 10 equal-width confidence bins:
   `ECE = Σ_b (n_b / N) · |acc_b − conf_b|`, where `acc_b` and `conf_b` are the
   bin's mean accuracy and mean confidence.
-- **Reliability diagram** = per-bin `(mean_conf, accuracy, n)` (the plot data).
+- **Reliability diagram** = per-bin `(mean_conf, accuracy, n, acc_lo, acc_hi)`.
+  The *diagram* uses **equal-mass (quantile) bins** — confidences split into ~5
+  equal-count groups — rather than the fixed equal-width bins used for ECE. At
+  small `n` (e.g. 30 items), fixed-width bins leave most bins near-empty so the
+  plotted curve is mostly sampling noise; equal-mass bins keep every plotted point
+  backed by a comparable number of items. Each point carries a 95% **Wilson**
+  interval (`acc_lo`/`acc_hi`) on its accuracy, rendered as a confidence band, and
+  the connecting line is suppressed below three populated bins. This is a
+  presentation choice for the diagram only; **the ECE and the published score are
+  unchanged** (still the standard fixed-bin definition above).
 - **Published score** = `1 − ECE` (normalized to `[0, 1]`, higher is better).
 - **95% CI** on the score via item bootstrap (default 500 resamples, seeded).
 
@@ -71,7 +80,9 @@ in `run_meta.json` via the run seed; change them only with a methodology bump.
 ## Limitations
 
 - MCQ guessing floor (above) bounds ECE.
-- 10 fixed-width bins; sparsely populated bins are noisy with small item sets.
+- ECE still uses 10 fixed-width bins; sparsely populated bins are noisy with small
+  item sets (the *diagram* now mitigates this with equal-mass bins + a per-point
+  confidence band, but the ECE statistic itself keeps the standard definition).
 - Single-correct-answer items only; no partial credit.
 - ECE is a **biased estimator** (it is minimized on the full sample and tends to
   be larger on bootstrap resamples, which redistribute items across bins). For a
