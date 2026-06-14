@@ -655,8 +655,9 @@ h2{font-family:var(--serif);font-weight:700;font-size:31px;line-height:1.12;
 .lede{font-size:18px;color:var(--ink-soft);margin:6px 0 24px;max-width:700px;}
 /* virtue overview */
 .virtues{display:grid;grid-template-columns:repeat(auto-fill,minmax(238px,1fr));
-  gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:4px;overflow:hidden;}
-.virtue{background:var(--paper);padding:18px 17px 19px;display:flex;flex-direction:column;}
+  background:var(--paper);border:1px solid var(--rule);border-radius:4px;overflow:hidden;}
+.virtue{background:var(--paper);padding:18px 17px 19px;display:flex;flex-direction:column;
+  border-top:1px solid var(--rule);border-left:1px solid var(--rule);margin:-1px 0 0 -1px;}
 .virtue h4{font-family:var(--serif);font-size:19px;margin:0 0 6px;}
 .virtue p{font-family:var(--sans);font-size:13px;line-height:1.55;color:var(--ink-soft);
   margin:0 0 14px;flex:1;}
