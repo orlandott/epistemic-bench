@@ -346,18 +346,22 @@ def _mean_conf(reliability: list[dict]):
 
 
 def _tendency(gap):
-    """Stated-confidence minus accuracy → plain label + palette colour."""
+    """Stated-confidence minus accuracy → plain label + themed palette token.
+
+    Colours are emitted as CSS custom properties (not raw hex) so the inline
+    confidence dots recolour with the light/dark theme — see ``--tend-*`` in
+    ``_STYLE``."""
     if gap is None:
-        return ("Not enough data", "#8a847a")
+        return ("Not enough data", "var(--ink-faint)")
     if gap >= 0.10:
-        return ("Overconfident", "#c2520f")
+        return ("Overconfident", "var(--tend-over)")
     if gap >= 0.04:
-        return ("Leans overconfident", "#d2691e")
+        return ("Leans overconfident", "var(--tend-lean-over)")
     if gap <= -0.10:
-        return ("Underconfident", "#9a948a")
+        return ("Underconfident", "var(--tend-under)")
     if gap <= -0.04:
-        return ("Leans underconfident", "#9a948a")
-    return ("Well matched", "#141414")
+        return ("Leans underconfident", "var(--tend-under)")
+    return ("Well matched", "var(--tend-match)")
 
 
 def _reliability_svg(bins: list[dict], gid: str, w: int = 300, h: int = 250) -> str:
@@ -385,30 +389,30 @@ def _reliability_svg(bins: list[dict], gid: str, w: int = 300, h: int = 250) -> 
     )
     # zones: below the diagonal = overconfident (warm wash); above = underconfident
     P.append(
-        f'<polygon points="{px(0):.1f},{py(0):.1f} {px(1):.1f},{py(0):.1f} '
+        f'<polygon class="rl-zone-over" points="{px(0):.1f},{py(0):.1f} {px(1):.1f},{py(0):.1f} '
         f'{px(1):.1f},{py(1):.1f}" fill="#fcf1e8"/>'
     )
     P.append(
-        f'<polygon points="{px(0):.1f},{py(0):.1f} {px(0):.1f},{py(1):.1f} '
+        f'<polygon class="rl-zone-under" points="{px(0):.1f},{py(0):.1f} {px(0):.1f},{py(1):.1f} '
         f'{px(1):.1f},{py(1):.1f}" fill="#f6f5f2"/>'
     )
     P.append(
-        f'<rect x="{px(0):.1f}" y="{py(1):.1f}" width="{iw}" height="{ih}" '
+        f'<rect class="rl-frame" x="{px(0):.1f}" y="{py(1):.1f}" width="{iw}" height="{ih}" '
         'fill="none" stroke="#d6cfc4"/>'
     )
     # perfect-calibration diagonal
     P.append(
-        f'<line x1="{px(0):.1f}" y1="{py(0):.1f}" x2="{px(1):.1f}" y2="{py(1):.1f}" '
+        f'<line class="rl-diag" x1="{px(0):.1f}" y1="{py(0):.1f}" x2="{px(1):.1f}" y2="{py(1):.1f}" '
         'stroke="#b7afa4" stroke-dasharray="4 3"/>'
     )
     # zone annotations (NYT-style chart labels)
     P.append(
-        f'<text x="{px(0.97):.0f}" y="{py(0.08):.0f}" text-anchor="end" font-size="8" '
-        f'fill="#c98a5e" letter-spacing=".06em" {sans}>OVERCONFIDENT</text>'
+        f'<text class="rl-anno-over" x="{px(0.97):.0f}" y="{py(0.08):.0f}" text-anchor="end" '
+        f'font-size="8" fill="#c98a5e" letter-spacing=".06em" {sans}>OVERCONFIDENT</text>'
     )
     P.append(
-        f'<text x="{px(0.03):.0f}" y="{py(0.92):.0f}" text-anchor="start" font-size="8" '
-        f'fill="#a9a296" letter-spacing=".06em" {sans}>UNDERCONFIDENT</text>'
+        f'<text class="rl-anno-under" x="{px(0.03):.0f}" y="{py(0.92):.0f}" text-anchor="start" '
+        f'font-size="8" fill="#a9a296" letter-spacing=".06em" {sans}>UNDERCONFIDENT</text>'
     )
     pts = [b for b in bins if b.get("n", 0) > 0]
     if pts:
@@ -427,20 +431,20 @@ def _reliability_svg(bins: list[dict], gid: str, w: int = 300, h: int = 250) -> 
     for t in (0.0, 0.5, 1.0):
         lbl = f"{int(t * 100)}%"
         P.append(
-            f'<text x="{px(t):.0f}" y="{h - padB + 15:.0f}" text-anchor="middle" '
+            f'<text class="rl-axis" x="{px(t):.0f}" y="{h - padB + 15:.0f}" text-anchor="middle" '
             f'font-size="9" fill="#8a847a" {sans}>{lbl}</text>'
         )
         P.append(
-            f'<text x="{padL - 7:.0f}" y="{py(t) + 3:.0f}" text-anchor="end" '
+            f'<text class="rl-axis" x="{padL - 7:.0f}" y="{py(t) + 3:.0f}" text-anchor="end" '
             f'font-size="9" fill="#8a847a" {sans}>{lbl}</text>'
         )
     P.append(
-        f'<text x="{px(0.5):.0f}" y="{h - 4:.0f}" text-anchor="middle" font-size="10" '
-        f'fill="#5c574f" {sans}>stated confidence</text>'
+        f'<text class="rl-axis-title" x="{px(0.5):.0f}" y="{h - 4:.0f}" text-anchor="middle" '
+        f'font-size="10" fill="#5c574f" {sans}>stated confidence</text>'
     )
     P.append(
-        f'<text x="13" y="{py(0.5):.0f}" text-anchor="middle" font-size="10" fill="#5c574f" '
-        f'{sans} transform="rotate(-90 13 {py(0.5):.0f})">actual accuracy</text>'
+        f'<text class="rl-axis-title" x="13" y="{py(0.5):.0f}" text-anchor="middle" font-size="10" '
+        f'fill="#5c574f" {sans} transform="rotate(-90 13 {py(0.5):.0f})">actual accuracy</text>'
     )
     P.append("</svg>")
     return "".join(P)
@@ -808,19 +812,36 @@ _STYLE = """
 :root{
   color-scheme: light;
   --ink:#141414; --ink-soft:#5c574f; --ink-faint:#8a847a;
-  --paper:#ffffff; --wash:#fbf8f4; --wash-warm:#fdf4ec;
+  --paper:#ffffff; --wash:#fbf8f4; --wash-warm:#fdf4ec; --sky-mid:#fdf8f3;
   --rule:#e7e2da; --rule-strong:#d6cfc4;
   --ember-deep:#9c3b13; --ember:#c2520f; --ember-bright:#e07a36;
   --ember-glow:#f4a563; --ember-pale:#f3d6bd;
+  /* confidence-tendency dots (calibration board) */
+  --tend-over:#c2520f; --tend-lean-over:#d2691e; --tend-under:#9a948a; --tend-match:#141414;
+  /* reliability-diagram palette (presentation attrs are the no-CSS fallback) */
+  --rl-zone-over:#fcf1e8; --rl-zone-under:#f6f5f2; --rl-frame:#d6cfc4; --rl-diag:#b7afa4;
+  --rl-anno-over:#c98a5e; --rl-anno-under:#a9a296; --rl-axis:#8a847a; --rl-axis-title:#5c574f;
   --serif: Georgia,"Times New Roman",Times,serif;
   --sans:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
+}
+/* dark theme: warm charcoal "paper", brightened ember so accents read on dark */
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --ink:#ece6dc; --ink-soft:#b7afa1; --ink-faint:#8c8576;
+  --paper:#17130e; --wash:#1e1913; --wash-warm:#271f17; --sky-mid:#1e1913;
+  --rule:#332b22; --rule-strong:#473d31;
+  --ember-deep:#f0894a; --ember:#e0712f; --ember-bright:#ef9a5b;
+  --ember-glow:#f6b277; --ember-pale:#4a3322;
+  --tend-over:#e0712f; --tend-lean-over:#e8894a; --tend-under:#a59e90; --tend-match:#ece6dc;
+  --rl-zone-over:#241a12; --rl-zone-under:#1c1813; --rl-frame:#473d31; --rl-diag:#5c5040;
+  --rl-anno-over:#c98a5e; --rl-anno-under:#8c8576; --rl-axis:#8c8576; --rl-axis-title:#a59e90;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--paper);color:var(--ink);
   font-family:var(--serif);font-size:18px;line-height:1.55;
   -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
-.skybg{background:linear-gradient(180deg,var(--wash-warm) 0%,#fdf8f3 42%,var(--paper) 100%);}
+.skybg{background:linear-gradient(180deg,var(--wash-warm) 0%,var(--sky-mid) 42%,var(--paper) 100%);}
 .wrap{max-width:880px;margin:0 auto;padding:0 22px 30px;}
 a{color:var(--ember-deep);text-decoration:underline;text-underline-offset:2px;}
 .kicker{font-family:var(--sans);font-weight:700;font-size:12px;letter-spacing:.14em;
@@ -835,6 +856,18 @@ a{color:var(--ember-deep);text-decoration:underline;text-underline-offset:2px;}
   font-family:var(--sans);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
   color:var(--ink-faint);padding:16px 0 13px;border-bottom:1px solid var(--rule-strong);}
 .topbar .brand{color:var(--ink);font-weight:700;}
+.topbar-right{display:inline-flex;align-items:center;gap:13px;}
+/* sun/moon dark-mode toggle */
+.theme-toggle{appearance:none;-webkit-appearance:none;margin:0;padding:0;cursor:pointer;
+  flex:none;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;
+  border:1px solid var(--rule-strong);border-radius:50%;background:var(--paper);color:var(--ink-soft);
+  line-height:0;transition:color .2s ease,border-color .2s ease,background-color .2s ease;}
+.theme-toggle:hover{color:var(--ember-deep);border-color:var(--ember);background:var(--wash-warm);}
+.theme-toggle:focus-visible{outline:2px solid var(--ember);outline-offset:2px;}
+.theme-toggle svg{display:block;width:16px;height:16px;}
+.theme-toggle .icon-sun{display:none;}
+:root[data-theme="dark"] .theme-toggle .icon-moon{display:none;}
+:root[data-theme="dark"] .theme-toggle .icon-sun{display:block;}
 .masthead{text-align:center;padding:40px 0 26px;}
 .eyebrow{font-family:var(--sans);font-size:12px;letter-spacing:.22em;text-transform:uppercase;
   color:var(--ember);margin:0 0 14px;}
@@ -971,7 +1004,68 @@ footer .prov{color:var(--ink-faint);margin-top:10px;}
   h2{font-size:26px;} .topbar{font-size:9.5px;letter-spacing:.1em;}
   .callout p{font-size:17px;}
 }
+/* reliability diagram: themed via vars (presentation attrs remain the fallback) */
+.rl-zone-over{fill:var(--rl-zone-over);}
+.rl-zone-under{fill:var(--rl-zone-under);}
+.rl-frame{stroke:var(--rl-frame);}
+.rl-diag{stroke:var(--rl-diag);}
+.rl-anno-over{fill:var(--rl-anno-over);}
+.rl-anno-under{fill:var(--rl-anno-under);}
+.rl-axis{fill:var(--rl-axis);}
+.rl-axis-title{fill:var(--rl-axis-title);}
+/* dark: recolour the few surfaces whose colours are baked in (not variable) */
+/* the "live" pill keeps the bright ember fill (matching dark accents); white text
+   would be low-contrast on it, so flip the label to a deep warm ink instead */
+:root[data-theme="dark"] .pill.live{color:#231405;}
+:root[data-theme="dark"] .banner{color:#f0c39e;}
+:root[data-theme="dark"] .pill.soon{background:#2a241d;}
+:root[data-theme="dark"] .pill.hold{background:#2e2117;}
+:root[data-theme="dark"] .tag-judge{border-color:#3f7a4f;color:#86d39a;background:#16241a;}
+/* smooth crossfade, enabled only after the first manual toggle (avoids load flash) */
+html.theme-anim, html.theme-anim *{
+  transition:background-color .25s ease,color .25s ease,border-color .25s ease,
+    fill .25s ease,stroke .25s ease !important;}
 """
+
+
+# Sun/moon toggle button (both icons ship; CSS shows the one for the current
+# theme). Stroke uses currentColor so it inherits the button's text colour.
+_THEME_TOGGLE = (
+    '<button type="button" class="theme-toggle" aria-label="Toggle dark mode">'
+    '<svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M20 14.4A8 8 0 1 1 9.6 4 6.3 6.3 0 0 0 20 14.4z"/></svg>'
+    '<svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<circle cx="12" cy="12" r="4.1"/>'
+    '<path d="M12 2.2v2.3M12 19.5v2.3M4.2 4.2 5.8 5.8M18.2 18.2l1.6 1.6M2.2 12h2.3'
+    'M19.5 12h2.3M4.2 19.8 5.8 18.2M18.2 5.8l1.6-1.6"/></svg>'
+    "</button>"
+)
+
+# Runs before first paint: apply the saved choice, else the OS preference, so the
+# page never flashes the wrong theme.
+_HEAD_THEME_SCRIPT = (
+    "<script>(function(){try{var t=localStorage.getItem('eb-theme');"
+    "if(!t){t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)')"
+    ".matches)?'dark':'light';}document.documentElement.setAttribute('data-theme',t);"
+    "}catch(e){}})();</script>"
+)
+
+# Wires the toggle: flips + persists the theme, keeps the a11y label in sync, and
+# enables crossfade transitions only after the first click.
+_THEME_SCRIPT = (
+    "<script>(function(){var r=document.documentElement,"
+    "b=document.querySelector('.theme-toggle');if(!b)return;"
+    "function sync(){var d=r.getAttribute('data-theme')==='dark';"
+    "var l=d?'Switch to light mode':'Switch to dark mode';"
+    "b.setAttribute('aria-label',l);b.setAttribute('title',l);"
+    "b.setAttribute('aria-pressed',String(d));}sync();"
+    "b.addEventListener('click',function(){r.classList.add('theme-anim');"
+    "var d=r.getAttribute('data-theme')==='dark';var n=d?'light':'dark';"
+    "r.setAttribute('data-theme',n);try{localStorage.setItem('eb-theme',n);}catch(e){}"
+    "sync();});})();</script>"
+)
 
 
 def build_site(report_path: Path | str, out_dir: Path | str) -> Path:
@@ -1045,10 +1139,12 @@ def build_site(report_path: Path | str, out_dir: Path | str) -> Path:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>epistemic-bench: how well do AI models reason?</title>
 <meta name="description" content="An open, journalist-friendly benchmark measuring whether leading AI models know the limits of their own knowledge, resist flattery, and stay consistent across framings.">
-<style>{_STYLE}</style></head>
+<style>{_STYLE}</style>
+{_HEAD_THEME_SCRIPT}
+</head>
 <body>
 <div class="skybg"><div class="wrap">
-<div class="topbar"><span class="brand">epistemic-bench</span><span>Public test set {bank}</span></div>
+<div class="topbar"><span class="brand">epistemic-bench</span><span class="topbar-right"><span class="topbar-meta">Public test set {bank}</span>{_THEME_TOGGLE}</span></div>
 <div class="masthead">
 <p class="eyebrow">An open benchmark</p>
 <h1 class="nameplate">epistemic<span class="em">·</span>bench</h1>
@@ -1070,6 +1166,7 @@ public, and publish the methodology in full.</p>
 {_withheld_section(report)}
 {footer}
 </div>
+{_THEME_SCRIPT}
 </body></html>"""
 
     path = out / "index.html"
