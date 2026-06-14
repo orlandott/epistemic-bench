@@ -486,13 +486,6 @@ def _svg_open(w: float, h: float, label: str) -> str:
     )
 
 
-def _nice_ceiling(m: float) -> float:
-    """Round a fractional max up to a tidy axis top (next 5%), clamped to [0.1, 1]."""
-    if m <= 0:
-        return 0.1
-    return max(0.1, min(1.0, math.ceil(m / 0.05) * 0.05))
-
-
 # Data-mark colours stay constant across themes (like the reliability dots); only
 # colours that would vanish on a dark background are themed via a CSS class, with
 # the hex kept as a no-CSS fallback. ``_TRACK``/``_ALARM`` flip with the theme.
@@ -529,36 +522,29 @@ def _legend(series, y: float) -> str:
     return "".join(out)
 
 
-def _grouped_bars_svg(groups, series, *, domain=None, lower_better=False) -> str:
-    """Horizontal bars grouped under each model. ``groups`` is [(label,[v,…])],
-    one value per ``series`` entry [(name,color)]. ``domain`` defaults to a tidy
-    auto-scale from the data (good for rates); pass (0,1) for 0–100% scores.
-    ``lower_better`` flips the on-chart polarity note so a reader cannot mistake a
-    longer failure-rate bar for a better result."""
-    w, marginL, marginR = 640.0, 16.0, 56.0
+def _grouped_bars_svg(groups, series, *, lower_better=False) -> str:
+    """Horizontal bars grouped under each model, one bar per ``series`` entry
+    [(name,color)]. The axis is a fixed 0–100% (no per-chart zoom) so charts are
+    honest and comparable; each bar carries its series name inline so meaning
+    never depends on colour; ``lower_better`` sets the on-chart polarity note."""
+    w, labelX, marginL, marginR = 640.0, 14.0, 162.0, 52.0
     iw = w - marginL - marginR
-    barH, barGap, headH, groupGap, topPad = 15.0, 6.0, 22.0, 16.0, 34.0
+    barH, barGap, headH, groupGap, topPad = 15.0, 6.0, 22.0, 14.0, 26.0
 
-    vals = [v for _, vs in groups for v in vs]
-    lo, hi = (0.0, _nice_ceiling(max(vals) if vals else 0.0)) if domain is None else domain
-    span = (hi - lo) or 1.0
-
-    def bx(v):
-        return marginL + (max(lo, min(hi, v)) - lo) / span * iw
+    def bx(v):  # fixed [0,1] domain
+        return marginL + max(0.0, min(1.0, v)) * iw
 
     h = topPad + sum(headH + len(series) * (barH + barGap) + groupGap for _ in groups)
-    P = [_svg_open(w, h, "per-model comparison")]
-    P.append(_legend(series, 14.0))
+    P = [_svg_open(w, h, "per-model comparison on a fixed 0–100% scale")]
     direction = "shorter is better" if lower_better else "longer is better"
-    P.append(
-        _txt(w - 2, 14, f"scale 0–{int(round(hi * 100))}%  ·  {direction}", cls="ch-faint",
-             fill=_INK_FAINT, size="10", anchor="end")
-    )
+    P.append(_txt(w - 2, 14, f"0–100%  ·  {direction}", cls="ch-faint", fill=_INK_FAINT,
+                  size="10", anchor="end"))
     y = topPad
     for label, vs in groups:
         P.append(_txt(2, y + 12, _esc(label), cls="ch-ink", fill=_INK, size="13", weight="700"))
         y += headH
         for (name, color), v in zip(series, vs):
+            P.append(_txt(labelX, y + barH - 3, _esc(name), cls="ch-soft", fill=_INK_SOFT, size="10"))
             P.append(
                 f'<rect class="ch-track" x="{marginL:.1f}" y="{y:.1f}" width="{iw:.1f}" '
                 f'height="{barH:.1f}" rx="2" fill="{_TRACK}"/>'
@@ -731,30 +717,34 @@ def _raw(d: dict, key: str, default: float = 0.0) -> float:
 
 
 # Each branch returns (chart SVG, plain-language caption keyed to the failure mode).
+# Component charts are sorted by the quantity they plot (not the index), so bar
+# lengths read monotonically; the index ranking lives in the interval chart above.
 def _virtue_chart(vkey: str, entries) -> tuple[str, str]:
     if vkey == "sycophancy":
+        es = sorted(entries, key=lambda md: _raw(md[1], "toward_user_rate"))
         groups = [
             (m["display_name"], [_raw(d, "toward_user_rate"), _raw(d, "abandoned_correct_rate")])
-            for m, d in entries
+            for m, d in es
         ]
         svg = _grouped_bars_svg(
-            groups, [("Caved to user", _EMBER), ("Abandoned a correct answer", _GREY)],
-            lower_better=True,
+            groups, [("Caved to user", _EMBER), ("Abandoned correct", _GREY)], lower_better=True
         )
         return svg, (
             "After we tell the model what we'd like to hear, how often it switches to that view, and "
             "how often it drops an answer that had been correct. Shorter bars are better."
         )
     if vkey == "framing":
-        groups = [(m["display_name"], [_raw(d, "framing_flip_rate")]) for m, d in entries]
+        es = sorted(entries, key=lambda md: _raw(md[1], "framing_flip_rate"))
+        groups = [(m["display_name"], [_raw(d, "framing_flip_rate")]) for m, d in es]
         svg = _grouped_bars_svg(groups, [("Verdict changed", _EMBER)], lower_better=True)
         return svg, (
             "How often the underlying choice changed when the same question was reworded in loaded "
             "terms and the options reordered. Shorter is better: a steady answer ignores the spin."
         )
     if vkey == "clarity":
+        es = sorted(entries, key=lambda md: _raw(md[1], "hedge_density"))
         groups = [
-            (m["display_name"], [_raw(d, "hedge_density"), _raw(d, "shift_rate")]) for m, d in entries
+            (m["display_name"], [_raw(d, "hedge_density"), _raw(d, "shift_rate")]) for m, d in es
         ]
         svg = _grouped_bars_svg(
             groups, [("Hedging (vague words)", _EMBER), ("Walked-back claims", _GREY)],
@@ -763,25 +753,25 @@ def _virtue_chart(vkey: str, entries) -> tuple[str, str]:
         return svg, (
             "The two things clarity penalises: the share of vague, non-committal words (calibrated "
             "probabilities are not counted), and the share of sentences that assert something then "
-            "quietly take it back. Shorter is better."
+            "quietly take it back. Sorted by hedging; shorter is better."
         )
     if vkey == "thoroughness":
+        es = sorted(entries, key=lambda md: _raw(md[1], "coverage"), reverse=True)
         groups = [
             (m["display_name"], [_raw(d, "coverage"), _raw(d, "balance"), _raw(d, "conciseness")])
-            for m, d in entries
+            for m, d in es
         ]
         svg = _grouped_bars_svg(
-            groups,
-            [("Coverage", _EMBER), ("Balance", _STEEL), ("Conciseness", _GOLD)],
-            domain=(0.0, 1.0),
+            groups, [("Coverage", _EMBER), ("Balance", _STEEL), ("Conciseness", _GOLD)]
         )
         return svg, (
             "The three parts of the thoroughness score: how many key points the answer covered, how "
-            "even-handed it was, and whether it stayed within a sensible length. Longer is better on "
-            "all three."
+            "even-handed it was, and whether it stayed within a sensible length. Sorted by coverage; "
+            "longer is better on all three."
         )
     if vkey == "creator_bias":
-        rows = [(m["display_name"], _raw(d, "mean_skew")) for m, d in entries]
+        es = sorted(entries, key=lambda md: _raw(md[1], "mean_skew"))
+        rows = [(m["display_name"], _raw(d, "mean_skew")) for m, d in es]
         svg = _diverging_svg(rows)
         return svg, (
             "The same position, credited to the model's own maker versus to rival firms. Bars to the "
@@ -792,21 +782,27 @@ def _virtue_chart(vkey: str, entries) -> tuple[str, str]:
         rows = []
         for m, d in entries:
             n = _raw(d, "n_claims") or 1.0
-            sup, con = _raw(d, "supported"), _raw(d, "contradicted")
-            uns = max(0.0, n - sup - con)
-            rows.append((m["display_name"], [sup / n, uns / n, con / n]))
+            full, amb = _raw(d, "supported_full"), _raw(d, "supported_ambiguous")
+            if full == 0.0 and amb == 0.0:  # reports predating the split
+                full = _raw(d, "supported")
+            con = _raw(d, "contradicted")
+            uns = max(0.0, n - full - amb - con)
+            rows.append((m["display_name"], [full / n, amb / n, uns / n, con / n]))
+        rows.sort(key=lambda r: r[1][0] + r[1][1], reverse=True)  # most supported first
         svg = _stacked_svg(
             rows,
             [
-                ("Supported by sources", _EMBER),
+                ("Supported", _EMBER),
+                ("Ambiguous (½)", _EMBER_GLOW),
                 ("Unsupported", _GREY_LIGHT),
-                ("Contradicted (reads as false)", _ALARM),
+                ("Contradicted", _ALARM),
             ],
         )
         return svg, (
-            "Every claim in a typical answer, checked against the sources: supported, merely "
-            "unsupported, or contradicted (readable as false). A longer supported band and a "
-            "vanishing contradicted band is better."
+            "Every claim in a typical answer, checked against the sources: supported with full "
+            "credit, supported but ambiguously worded (half credit), merely unsupported, or "
+            "contradicted (readable as false). A longer supported band and a vanishing contradicted "
+            "band is better."
         )
     return "", ""
 

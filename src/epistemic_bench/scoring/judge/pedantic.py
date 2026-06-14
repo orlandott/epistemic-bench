@@ -69,7 +69,7 @@ def score_pedantic(
     if not claims:
         return MetricScore(item.id, "pedantic", model_id, 0.0, n_conditions=len(completions), valid=False)
 
-    supported = contradicted = ambiguous = 0
+    supported = contradicted = ambiguous = supported_ambiguous = 0
     credit = 0.0
     for c in claims:
         verdict = c.get("verdict")
@@ -78,6 +78,8 @@ def score_pedantic(
             ambiguous += 1
         if verdict == "supported":
             supported += 1
+            if amb:
+                supported_ambiguous += 1  # supported but ambiguous -> only half credit
             credit += 0.5 if amb else 1.0
         elif verdict == "contradicted":
             contradicted += 1
@@ -93,6 +95,9 @@ def score_pedantic(
             "precision": score,
             "n_claims": float(n),
             "supported": float(supported),
+            # split so a chart can show full- vs half-credit support honestly
+            "supported_full": float(supported - supported_ambiguous),
+            "supported_ambiguous": float(supported_ambiguous),
             "contradicted": float(contradicted),
             "ambiguous": float(ambiguous),
         },
