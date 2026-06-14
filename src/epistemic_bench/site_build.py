@@ -17,6 +17,7 @@ package (importable) and emits to ``site/out/`` rather than living at repo-root
 from __future__ import annotations
 
 import html
+import math
 import re
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +35,16 @@ def _fmt(x, nd: int = 3) -> str:
 
 def _pct(x) -> str:
     return "n/a" if x is None else f"{round(float(x) * 100)}%"
+
+
+def _signed(x, nd: int = 2) -> str:
+    """Signed value with a typographic minus; near-zero renders unsigned."""
+    if x is None:
+        return "n/a"
+    v = float(x)
+    if abs(v) < 0.005:
+        return f"{0.0:.{nd}f}"
+    return f"{v:+.{nd}f}".replace("-", "−")
 
 
 def _title(name: str) -> str:
@@ -450,6 +461,298 @@ def _reliability_svg(bins: list[dict], gid: str, w: int = 300, h: int = 250) -> 
     return "".join(P)
 
 
+# --- comparison charts (one per virtue, beyond calibration) ------------------
+# Inline SVG only (no plotting deps, no JS) so the page renders offline. Each
+# virtue gets a chart that mirrors its own failure mode rather than a generic
+# score bar: bars for rates, a centred diverging bar for bias, a stacked bar for
+# the anatomy of claims, grouped bars for multi-part scores. All collapsed by
+# default, like the calibration diagrams, and expanded on click.
+
+_SANS = 'font-family="Helvetica Neue,Helvetica,Arial,sans-serif"'
+# Palette mirrors the CSS :root tokens so the SVG and the page stay in step.
+_INK, _INK_SOFT, _INK_FAINT = "#141414", "#5c574f", "#8a847a"
+_RULE, _RULE_STRONG = "#e7e2da", "#d6cfc4"
+_EMBER_DEEP, _EMBER, _EMBER_BRIGHT, _EMBER_GLOW = "#9c3b13", "#c2520f", "#e07a36", "#f0a463"
+_GREY, _GREY_LIGHT, _ALARM, _TRACK = "#9a948a", "#d8d2c8", "#6f1f0c", "#efece6"
+
+
+def _svg_open(w: float, h: float, label: str) -> str:
+    return (
+        f'<svg viewBox="0 0 {w:.0f} {h:.0f}" width="100%" height="auto" '
+        f'preserveAspectRatio="xMidYMid meet" role="img" aria-label="{_esc(label)}">'
+    )
+
+
+def _nice_ceiling(m: float) -> float:
+    """Round a fractional max up to a tidy axis top (next 5%), clamped to [0.1, 1]."""
+    if m <= 0:
+        return 0.1
+    return max(0.1, min(1.0, math.ceil(m / 0.05) * 0.05))
+
+
+# Data-mark colours stay constant across themes (like the reliability dots); only
+# colours that would vanish on a dark background are themed via a CSS class, with
+# the hex kept as a no-CSS fallback. ``_TRACK``/``_ALARM`` flip with the theme.
+_THEME_CLASS = {_ALARM: "ch-alarm"}
+
+
+def _fill_cls(color: str) -> str:
+    c = _THEME_CLASS.get(color)
+    return f' class="{c}"' if c else ""
+
+
+def _txt(x, y, s, *, cls, fill, size, anchor=None, weight=None, ls=None) -> str:
+    """A themed <text>: ``cls`` flips the colour with the theme, ``fill`` is the
+    no-CSS fallback."""
+    a = f' text-anchor="{anchor}"' if anchor else ""
+    wt = f' font-weight="{weight}"' if weight else ""
+    lsp = f' letter-spacing="{ls}"' if ls else ""
+    return (
+        f'<text class="{cls}" x="{x:.1f}" y="{y:.1f}"{a} font-size="{size}"{wt}{lsp} '
+        f'fill="{fill}" {_SANS}>{s}</text>'
+    )
+
+
+def _legend(series, y: float) -> str:
+    """Inline colour-chip legend laid left→right at baseline ``y``."""
+    out, x = [], 2.0
+    for name, color in series:
+        out.append(
+            f'<rect{_fill_cls(color)} x="{x:.1f}" y="{y - 9:.1f}" width="10" height="10" '
+            f'rx="2" fill="{color}"/>'
+        )
+        out.append(_txt(x + 15, y, _esc(name), cls="ch-soft", fill=_INK_SOFT, size="10.5"))
+        x += 15 + 7.0 * len(name) + 20
+    return "".join(out)
+
+
+def _grouped_bars_svg(groups, series, *, domain=None) -> str:
+    """Horizontal bars grouped under each model. ``groups`` is [(label,[v,…])],
+    one value per ``series`` entry [(name,color)]. ``domain`` defaults to a tidy
+    auto-scale from the data (good for rates); pass (0,1) for 0–100% scores."""
+    w, marginL, marginR = 640.0, 16.0, 56.0
+    iw = w - marginL - marginR
+    barH, barGap, headH, groupGap, topPad = 15.0, 6.0, 22.0, 16.0, 34.0
+
+    vals = [v for _, vs in groups for v in vs]
+    lo, hi = (0.0, _nice_ceiling(max(vals) if vals else 0.0)) if domain is None else domain
+    span = (hi - lo) or 1.0
+
+    def bx(v):
+        return marginL + (max(lo, min(hi, v)) - lo) / span * iw
+
+    h = topPad + sum(headH + len(series) * (barH + barGap) + groupGap for _ in groups)
+    P = [_svg_open(w, h, "per-model comparison")]
+    P.append(_legend(series, 14.0))
+    P.append(
+        _txt(w - 2, 14, f"scale 0–{int(round(hi * 100))}%", cls="ch-faint", fill=_INK_FAINT,
+             size="10", anchor="end")
+    )
+    y = topPad
+    for label, vs in groups:
+        P.append(_txt(2, y + 12, _esc(label), cls="ch-ink", fill=_INK, size="13", weight="700"))
+        y += headH
+        for (name, color), v in zip(series, vs):
+            P.append(
+                f'<rect class="ch-track" x="{marginL:.1f}" y="{y:.1f}" width="{iw:.1f}" '
+                f'height="{barH:.1f}" rx="2" fill="{_TRACK}"/>'
+            )
+            P.append(
+                f'<rect x="{marginL:.1f}" y="{y:.1f}" width="{max(0.0, bx(v) - marginL):.1f}" '
+                f'height="{barH:.1f}" rx="2" fill="{color}"/>'
+            )
+            P.append(
+                _txt(w - 4, y + barH - 3, _pct(v), cls="ch-soft", fill=_INK_SOFT, size="10.5",
+                     anchor="end")
+            )
+            y += barH + barGap
+        y += groupGap
+    P.append("</svg>")
+    return "".join(P)
+
+
+def _diverging_svg(rows) -> str:
+    """Signed bars from a central zero axis. ``rows`` is [(label, value)] in
+    stance-scale points; right (positive) = favours own maker, left = rivals."""
+    w, marginL, marginR = 640.0, 16.0, 16.0
+    iw = w - marginL - marginR
+    cx = marginL + iw / 2
+    barH, gap, topPad = 18.0, 12.0, 42.0
+    hi = max(0.5, math.ceil(max((abs(v) for _, v in rows), default=0.0) / 0.5) * 0.5)
+
+    def dx(v):
+        return cx + (max(-hi, min(hi, v)) / hi) * (iw / 2)
+
+    h = topPad + len(rows) * (barH + gap) + 6
+    P = [_svg_open(w, h, "stance skew toward the model's own maker")]
+    P.append(
+        f'<line class="ch-axis" x1="{cx:.1f}" y1="{topPad - 8:.1f}" x2="{cx:.1f}" '
+        f'y2="{h - 6:.1f}" stroke="{_RULE_STRONG}"/>'
+    )
+    P.append(_txt(cx + 5, topPad - 16, "FAVOURS OWN MAKER →", cls="ch-emberdeep",
+                  fill=_EMBER_DEEP, size="9", ls=".06em"))
+    P.append(_txt(cx - 5, topPad - 16, "← FAVOURS RIVALS", cls="ch-faint", fill=_INK_FAINT,
+                  size="9", anchor="end", ls=".06em"))
+    P.append(_txt(w - 2, topPad - 16, f"scale ±{hi:g} pts", cls="ch-faint", fill=_INK_FAINT,
+                  size="9.5", anchor="end"))
+    y = topPad
+    for label, v in rows:
+        color = _EMBER if v >= 0 else _GREY
+        x0, bw = min(cx, dx(v)), abs(dx(v) - cx)
+        P.append(
+            f'<rect x="{x0:.1f}" y="{y:.1f}" width="{max(0.0, bw):.1f}" height="{barH:.1f}" '
+            f'rx="2" fill="{color}"/>'
+        )
+        if v >= 0:
+            P.append(_txt(cx - 6, y + barH - 4, _esc(label), cls="ch-ink", fill=_INK,
+                          size="11.5", anchor="end"))
+            P.append(_txt(dx(v) + 5, y + barH - 4, _signed(v), cls="ch-soft", fill=_INK_SOFT,
+                          size="10.5"))
+        else:
+            P.append(_txt(cx + 6, y + barH - 4, _esc(label), cls="ch-ink", fill=_INK, size="11.5"))
+            P.append(_txt(dx(v) - 5, y + barH - 4, _signed(v), cls="ch-soft", fill=_INK_SOFT,
+                          size="10.5", anchor="end"))
+        y += barH + gap
+    P.append("</svg>")
+    return "".join(P)
+
+
+def _stacked_svg(rows, segs) -> str:
+    """100%-width stacked bar per model. ``rows`` is [(label,[frac,…])] aligned
+    with ``segs`` [(name,color)]; fractions should sum to ~1."""
+    w, marginL, marginR = 640.0, 16.0, 16.0
+    iw = w - marginL - marginR
+    barH, headH, gap, topPad = 18.0, 20.0, 16.0, 34.0
+    dark = {_EMBER, _EMBER_DEEP, _ALARM}
+
+    h = topPad + len(rows) * (headH + barH + gap)
+    P = [_svg_open(w, h, "claim outcomes per answer")]
+    P.append(_legend(segs, 14.0))
+    y = topPad
+    for label, fracs in rows:
+        P.append(_txt(2, y + 12, _esc(label), cls="ch-ink", fill=_INK, size="13", weight="700"))
+        y += headH
+        x = marginL
+        for (name, color), f in zip(segs, fracs):
+            segw = f * iw
+            if segw > 0.5:
+                P.append(
+                    f'<rect{_fill_cls(color)} x="{x:.1f}" y="{y:.1f}" width="{segw:.1f}" '
+                    f'height="{barH:.1f}" fill="{color}"/>'
+                )
+                if segw > 26:
+                    tcol = "#fff" if color in dark else _INK
+                    P.append(
+                        f'<text x="{x + segw / 2:.1f}" y="{y + barH - 5:.1f}" text-anchor="middle" '
+                        f'font-size="10" fill="{tcol}" {_SANS}>{_pct(f)}</text>'
+                    )
+            x += segw
+        y += barH + gap
+    P.append("</svg>")
+    return "".join(P)
+
+
+def _raw(d: dict, key: str, default: float = 0.0) -> float:
+    return float(d.get("raw", {}).get(key, default) or 0.0)
+
+
+# Each branch returns (chart SVG, plain-language caption keyed to the failure mode).
+def _virtue_chart(vkey: str, entries) -> tuple[str, str]:
+    if vkey == "sycophancy":
+        groups = [
+            (m["display_name"], [_raw(d, "toward_user_rate"), _raw(d, "abandoned_correct_rate")])
+            for m, d in entries
+        ]
+        svg = _grouped_bars_svg(
+            groups, [("Caved to user", _EMBER), ("Abandoned a correct answer", _GREY)]
+        )
+        return svg, (
+            "After we tell the model what we'd like to hear, how often it switches to that view, and "
+            "how often it drops an answer that had been correct. Shorter bars are better."
+        )
+    if vkey == "framing":
+        groups = [(m["display_name"], [_raw(d, "framing_flip_rate")]) for m, d in entries]
+        svg = _grouped_bars_svg(groups, [("Verdict changed", _EMBER)])
+        return svg, (
+            "How often the underlying choice changed when the same question was reworded in loaded "
+            "terms and the options reordered. Shorter is better: a steady answer ignores the spin."
+        )
+    if vkey == "clarity":
+        groups = [
+            (m["display_name"], [_raw(d, "hedge_density"), _raw(d, "shift_rate")]) for m, d in entries
+        ]
+        svg = _grouped_bars_svg(
+            groups, [("Hedging (vague words)", _EMBER), ("Walked-back claims", _GREY)]
+        )
+        return svg, (
+            "The two things clarity penalises: the share of vague, non-committal words (calibrated "
+            "probabilities are not counted), and the share of sentences that assert something then "
+            "quietly take it back. Shorter is better."
+        )
+    if vkey == "thoroughness":
+        groups = [
+            (m["display_name"], [_raw(d, "coverage"), _raw(d, "balance"), _raw(d, "conciseness")])
+            for m, d in entries
+        ]
+        svg = _grouped_bars_svg(
+            groups,
+            [("Coverage", _EMBER), ("Balance", _EMBER_BRIGHT), ("Conciseness", _EMBER_GLOW)],
+            domain=(0.0, 1.0),
+        )
+        return svg, (
+            "The three parts of the thoroughness score: how many key points the answer covered, how "
+            "even-handed it was, and whether it stayed within a sensible length. Longer is better on "
+            "all three."
+        )
+    if vkey == "creator_bias":
+        rows = [(m["display_name"], _raw(d, "mean_skew")) for m, d in entries]
+        svg = _diverging_svg(rows)
+        return svg, (
+            "The same position, credited to the model's own maker versus to rival firms. Bars to the "
+            "right mean it rated its own maker's version more warmly; closer to the centre line is "
+            "more impartial. Measured in stance-scale points."
+        )
+    if vkey == "pedantic":
+        rows = []
+        for m, d in entries:
+            n = _raw(d, "n_claims") or 1.0
+            sup, con = _raw(d, "supported"), _raw(d, "contradicted")
+            uns = max(0.0, n - sup - con)
+            rows.append((m["display_name"], [sup / n, uns / n, con / n]))
+        svg = _stacked_svg(
+            rows,
+            [
+                ("Supported by sources", _EMBER),
+                ("Unsupported", _GREY_LIGHT),
+                ("Contradicted (reads as false)", _ALARM),
+            ],
+        )
+        return svg, (
+            "Every claim in a typical answer, checked against the sources: supported, merely "
+            "unsupported, or contradicted (readable as false). A longer supported band and a "
+            "vanishing contradicted band is better."
+        )
+    return "", ""
+
+
+def _charts_details(inner: str, summary: str) -> str:
+    """Collapsed-by-default disclosure wrapping a section's chart(s)."""
+    if not inner:
+        return ""
+    return (
+        '<details class="charts"><summary>' + _esc(summary) + "</summary>"
+        f'<div class="charts-body">{inner}</div></details>'
+    )
+
+
+def _virtue_chart_block(vkey: str, entries) -> str:
+    svg, caption = _virtue_chart(vkey, entries)
+    if not svg:
+        return ""
+    fig = f'<figure class="chart">{svg}<figcaption>{_esc(caption)}</figcaption></figure>'
+    return _charts_details(fig, "Show the chart")
+
+
 # --- page sections -----------------------------------------------------------
 
 
@@ -685,9 +988,11 @@ def _calibration_section(report: dict) -> str:
         "<th>Confidence</th><th class='num'>Questions</th>"
         "</tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>"
-        f"{_reliability_guide()}"
-        '<div class="cards">' + "".join(cards) + "</div>"
-        f"{technical}"
+        + _charts_details(
+            _reliability_guide() + '<div class="cards">' + "".join(cards) + "</div>",
+            "Show the reliability diagrams",
+        )
+        + f"{technical}"
         "</section>"
     )
 
@@ -789,6 +1094,7 @@ def _virtue_section(report: dict, vkey: str) -> str:
         f"<tbody>{''.join(tech_rows)}</tbody></table></div>"
         f'<p class="glossary">{gloss}</p></details>'
     )
+    charts = _virtue_chart_block(vkey, entries)
     return (
         '<section>'
         f'<p class="kicker">Measured now &middot; {_esc(info["title"])}</p>'
@@ -803,6 +1109,7 @@ def _virtue_section(report: dict, vkey: str) -> str:
         f"{plain_head}<th class='num'>Questions</th>"
         "</tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>"
+        f"{charts}"
         f"{technical}"
         "</section>"
     )
@@ -821,6 +1128,8 @@ _STYLE = """
   /* reliability-diagram palette (presentation attrs are the no-CSS fallback) */
   --rl-zone-over:#fcf1e8; --rl-zone-under:#f6f5f2; --rl-frame:#d6cfc4; --rl-diag:#b7afa4;
   --rl-anno-over:#c98a5e; --rl-anno-under:#a9a296; --rl-axis:#8a847a; --rl-axis-title:#5c574f;
+  /* comparison-chart palette (bar track + alarm flip with the theme) */
+  --ch-track:#efece6; --ch-alarm:#6f1f0c;
   --serif: Georgia,"Times New Roman",Times,serif;
   --sans:"Helvetica Neue",Helvetica,Arial,system-ui,sans-serif;
 }
@@ -835,6 +1144,7 @@ _STYLE = """
   --tend-over:#e0712f; --tend-lean-over:#e8894a; --tend-under:#a59e90; --tend-match:#ece6dc;
   --rl-zone-over:#241a12; --rl-zone-under:#1c1813; --rl-frame:#473d31; --rl-diag:#5c5040;
   --rl-anno-over:#c98a5e; --rl-anno-under:#8c8576; --rl-axis:#8c8576; --rl-axis-title:#a59e90;
+  --ch-track:#2a241d; --ch-alarm:#d2543c;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -990,6 +1300,24 @@ details.tech table{border-collapse:collapse;width:100%;font-family:var(--sans);
 details.tech th,details.tech td{padding:9px 12px;border-bottom:1px solid var(--rule);text-align:left;}
 details.tech th{color:var(--ink-faint);text-transform:uppercase;font-size:10.5px;letter-spacing:.05em;}
 details.tech td.num,details.tech th.num{text-align:right;font-variant-numeric:tabular-nums;}
+/* collapsible charts (every virtue, collapsed by default) */
+details.charts{margin:30px 0 0;border-top:1px solid var(--rule);padding-top:4px;}
+details.charts>summary{font-family:var(--sans);font-size:12.5px;font-weight:700;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--ember-deep);cursor:pointer;
+  list-style:none;display:flex;align-items:center;gap:9px;padding:10px 0;}
+details.charts>summary::-webkit-details-marker{display:none;}
+details.charts>summary::before{content:"";flex:none;width:0;height:0;
+  border-left:6px solid var(--ember);border-top:5px solid transparent;
+  border-bottom:5px solid transparent;transition:transform .15s ease;}
+details.charts[open]>summary::before{transform:rotate(90deg);}
+details.charts>summary:hover{color:var(--ember);}
+.charts-body{margin:6px 0 4px;}
+.charts-body .cards{margin-top:14px;}
+.charts-body .chart-guide{margin-top:6px;}
+figure.chart{margin:6px 0 0;}
+figure.chart svg{display:block;width:100%;height:auto;}
+figure.chart figcaption{font-family:var(--sans);font-size:12px;line-height:1.55;
+  color:var(--ink-faint);margin:12px 2px 0;max-width:700px;}
 .glossary{font-family:var(--sans);font-size:13px;color:var(--ink-soft);
   line-height:1.65;margin:16px 0 0;}
 .glossary b{color:var(--ink);}
@@ -1013,6 +1341,14 @@ footer .prov{color:var(--ink-faint);margin-top:10px;}
 .rl-anno-under{fill:var(--rl-anno-under);}
 .rl-axis{fill:var(--rl-axis);}
 .rl-axis-title{fill:var(--rl-axis-title);}
+/* comparison charts: themed via vars (presentation attrs remain the fallback) */
+.ch-ink{fill:var(--ink);}
+.ch-soft{fill:var(--ink-soft);}
+.ch-faint{fill:var(--ink-faint);}
+.ch-emberdeep{fill:var(--ember-deep);}
+.ch-track{fill:var(--ch-track);}
+.ch-alarm{fill:var(--ch-alarm);}
+.ch-axis{stroke:var(--rule-strong);}
 /* dark: recolour the few surfaces whose colours are baked in (not variable) */
 /* the "live" pill keeps the bright ember fill (matching dark accents); white text
    would be low-contrast on it, so flip the label to a deep warm ink instead */

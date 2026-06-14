@@ -122,7 +122,7 @@ src/epistemic_bench/
   rotation.py    manifest, active-operationalization selection, rotation plan (SPEC §8)
   validation.py  judge-validation gate: Cohen's κ / Pearson r vs human sample
   report.py      report.json writer
-  site_build.py  static leaderboard (inline-SVG reliability diagrams)
+  site_build.py  static leaderboard (collapsible inline-SVG charts, one per virtue)
   cli.py         epb: validate | run | score | aggregate | report | validate-judge | manifest | rotate | demo
 config/          example models + run parameters (incl. judge thresholds)
 methodology/     reproducible per-metric methodology docs (auditability)
