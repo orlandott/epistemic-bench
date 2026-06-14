@@ -875,7 +875,7 @@ def _virtue_chart_block(vkey: str, entries) -> str:
 
 
 _STATUS_PILL = {
-    "live": '<span class="pill live">Measured now</span>',
+    "live": '<span class="pill live">Live</span>',
     "withheld": '<span class="pill hold">Withheld pending validation</span>',
     "soon": '<span class="pill soon">In development</span>',
 }
@@ -1091,7 +1091,7 @@ def _calibration_section(report: dict) -> str:
     nq = max((int(d.get("raw", {}).get("n_items", 0)) for _, d in entries), default=0)
     return (
         '<section>'
-        '<p class="kicker">Measured now &middot; Calibration</p>'
+        '<p class="kicker">Calibration</p>'
         "<h2>Does the model know what it knows?</h2>"
         f'<p class="lede">We ask {nq} multiple-choice factual questions and require each model to '
         "state, as a percentage, how sure it is. A well-calibrated model is right about as often "
@@ -1218,7 +1218,7 @@ def _virtue_section(report: dict, vkey: str) -> str:
     charts = _virtue_chart_block(vkey, entries)
     return (
         '<section>'
-        f'<p class="kicker">Measured now &middot; {_esc(info["title"])}</p>'
+        f'<p class="kicker">{_esc(info["title"])}</p>'
         f'<h2>{_esc(info["q"])}</h2>'
         f'<p class="lede">{_esc(info["blurb"])}</p>'
         f"{_section_tags(report, virtue)}"

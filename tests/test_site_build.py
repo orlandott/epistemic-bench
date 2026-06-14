@@ -252,15 +252,20 @@ class TestOneChartPerLiveVirtue(unittest.TestCase):
         self.assertIn("At a glance &middot; Overall", html)
         self.assertEqual(html.count('class="board"'), len(live) + 1)
 
-    def test_one_measured_now_section_per_live_virtue(self):
+    def test_one_section_kicker_per_live_virtue(self):
         report = make_report()
         html = _build(report)
-        # Each live virtue's section carries a "Measured now · <virtue>" kicker
-        # (distinct from the "Measured now" status pill in the overview grid and
-        # the overall scorecard's "At a glance · Overall" kicker).
-        self.assertEqual(
-            html.count("Measured now &middot;"), len(_live_virtue_keys(report))
-        )
+        # Each live virtue's section carries a kicker with the virtue's title
+        # (e.g. '<p class="kicker">Calibration</p>'), distinct from the overview
+        # grid's <h4> headings and the overall scorecard's "At a glance · Overall"
+        # kicker. Non-live virtues render no such section.
+        for v in VIRTUES:
+            kicker = f'<p class="kicker">{v["title"]}</p>'
+            expected = 1 if _is_live(report, v["key"]) else 0
+            self.assertEqual(
+                html.count(kicker), expected,
+                f"{v['key']}: expected {expected} section kicker(s)",
+            )
 
     def test_one_reliability_diagram_per_calibration_model(self):
         report = make_report()
