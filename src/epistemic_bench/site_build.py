@@ -474,6 +474,9 @@ _INK, _INK_SOFT, _INK_FAINT = "#141414", "#5c574f", "#8a847a"
 _RULE, _RULE_STRONG = "#e7e2da", "#d6cfc4"
 _EMBER_DEEP, _EMBER, _EMBER_BRIGHT, _EMBER_GLOW = "#9c3b13", "#c2520f", "#e07a36", "#f0a463"
 _GREY, _GREY_LIGHT, _ALARM, _TRACK = "#9a948a", "#d8d2c8", "#6f1f0c", "#efece6"
+# Distinct hues for multi-series charts where same-hue ramps are hard to tell apart
+# (thoroughness). Kept constant across themes, like the reliability dots.
+_STEEL, _GOLD = "#4f7299", "#caa23c"
 
 
 def _svg_open(w: float, h: float, label: str) -> str:
@@ -526,10 +529,12 @@ def _legend(series, y: float) -> str:
     return "".join(out)
 
 
-def _grouped_bars_svg(groups, series, *, domain=None) -> str:
+def _grouped_bars_svg(groups, series, *, domain=None, lower_better=False) -> str:
     """Horizontal bars grouped under each model. ``groups`` is [(label,[v,…])],
     one value per ``series`` entry [(name,color)]. ``domain`` defaults to a tidy
-    auto-scale from the data (good for rates); pass (0,1) for 0–100% scores."""
+    auto-scale from the data (good for rates); pass (0,1) for 0–100% scores.
+    ``lower_better`` flips the on-chart polarity note so a reader cannot mistake a
+    longer failure-rate bar for a better result."""
     w, marginL, marginR = 640.0, 16.0, 56.0
     iw = w - marginL - marginR
     barH, barGap, headH, groupGap, topPad = 15.0, 6.0, 22.0, 16.0, 34.0
@@ -544,9 +549,10 @@ def _grouped_bars_svg(groups, series, *, domain=None) -> str:
     h = topPad + sum(headH + len(series) * (barH + barGap) + groupGap for _ in groups)
     P = [_svg_open(w, h, "per-model comparison")]
     P.append(_legend(series, 14.0))
+    direction = "shorter is better" if lower_better else "longer is better"
     P.append(
-        _txt(w - 2, 14, f"scale 0–{int(round(hi * 100))}%", cls="ch-faint", fill=_INK_FAINT,
-             size="10", anchor="end")
+        _txt(w - 2, 14, f"scale 0–{int(round(hi * 100))}%  ·  {direction}", cls="ch-faint",
+             fill=_INK_FAINT, size="10", anchor="end")
     )
     y = topPad
     for label, vs in groups:
@@ -652,6 +658,74 @@ def _stacked_svg(rows, segs) -> str:
     return "".join(P)
 
 
+def _ticks(d0: float, d1: float) -> list[float]:
+    r = d1 - d0
+    step = 0.05 if r <= 0.2 else (0.1 if r <= 0.5 else 0.2)
+    t, out = math.ceil(d0 / step) * step, []
+    while t <= d1 + 1e-9:
+        out.append(round(t, 4))
+        t += step
+    return out
+
+
+def _interval_svg(rows) -> str:
+    """Forest plot of the published index with its 95% interval. ``rows`` is
+    [(label, score, lo, hi)] in [0,1]; lo/hi may be None. A focused (non-zero)
+    axis is honest here because position, not bar length, carries the meaning —
+    and overlapping bars make a non-distinguishable rank visible at a glance."""
+    w, marginL, marginR = 640.0, 150.0, 46.0
+    iw = w - marginL - marginR
+    rowH, topPad, botPad = 22.0, 18.0, 36.0
+
+    vals = [v for _, s, lo, hi in rows for v in (s, lo, hi) if v is not None]
+    dmin, dmax = (min(vals), max(vals)) if vals else (0.0, 1.0)
+    d0 = max(0.0, math.floor((dmin * 100 - 4) / 5) * 5 / 100)
+    d1 = min(1.0, math.ceil((dmax * 100 + 4) / 5) * 5 / 100)
+    if d1 - d0 < 0.1:
+        d0, d1 = max(0.0, d1 - 0.1), d1
+    span = (d1 - d0) or 1.0
+
+    def X(v):
+        return marginL + (min(d1, max(d0, v)) - d0) / span * iw
+
+    h = topPad + len(rows) * rowH + botPad
+    P = [_svg_open(w, h, "published index with its 95% confidence interval")]
+    for t in _ticks(d0, d1):
+        P.append(
+            f'<line class="ch-grid" x1="{X(t):.1f}" y1="{topPad - 4:.1f}" x2="{X(t):.1f}" '
+            f'y2="{h - botPad + 2:.1f}" stroke="{_RULE}"/>'
+        )
+        P.append(_txt(X(t), h - botPad + 15, str(int(round(t * 100))), cls="ch-faint",
+                      fill=_INK_FAINT, size="9.5", anchor="middle"))
+    P.append(_txt((marginL + (w - marginR)) / 2, h - 5, "index (0–100, higher is better)",
+                  cls="ch-faint", fill=_INK_FAINT, size="10", anchor="middle"))
+    y = topPad
+    for label, s, lo, hi in rows:
+        cy = y + rowH / 2
+        if lo is not None and hi is not None:
+            P.append(
+                f'<line class="ch-whisker" x1="{X(lo):.1f}" y1="{cy:.1f}" x2="{X(hi):.1f}" '
+                f'y2="{cy:.1f}" stroke="{_INK_FAINT}" stroke-width="2"/>'
+            )
+            for e in (lo, hi):
+                P.append(
+                    f'<line class="ch-whisker" x1="{X(e):.1f}" y1="{cy - 4:.1f}" x2="{X(e):.1f}" '
+                    f'y2="{cy + 4:.1f}" stroke="{_INK_FAINT}" stroke-width="2"/>'
+                )
+        P.append(_txt(marginL - 10, cy + 4, _esc(label), cls="ch-ink", fill=_INK, size="11.5",
+                      anchor="end", weight="700"))
+        if s is not None:
+            P.append(
+                f'<circle cx="{X(s):.1f}" cy="{cy:.1f}" r="4.5" fill="{_EMBER}" '
+                f'stroke="#fff" stroke-width="1.2"/>'
+            )
+            P.append(_txt(w - 4, cy + 4, str(round(s * 100)), cls="ch-soft", fill=_INK_SOFT,
+                          size="11", anchor="end", weight="700"))
+        y += rowH
+    P.append("</svg>")
+    return "".join(P)
+
+
 def _raw(d: dict, key: str, default: float = 0.0) -> float:
     return float(d.get("raw", {}).get(key, default) or 0.0)
 
@@ -664,7 +738,8 @@ def _virtue_chart(vkey: str, entries) -> tuple[str, str]:
             for m, d in entries
         ]
         svg = _grouped_bars_svg(
-            groups, [("Caved to user", _EMBER), ("Abandoned a correct answer", _GREY)]
+            groups, [("Caved to user", _EMBER), ("Abandoned a correct answer", _GREY)],
+            lower_better=True,
         )
         return svg, (
             "After we tell the model what we'd like to hear, how often it switches to that view, and "
@@ -672,7 +747,7 @@ def _virtue_chart(vkey: str, entries) -> tuple[str, str]:
         )
     if vkey == "framing":
         groups = [(m["display_name"], [_raw(d, "framing_flip_rate")]) for m, d in entries]
-        svg = _grouped_bars_svg(groups, [("Verdict changed", _EMBER)])
+        svg = _grouped_bars_svg(groups, [("Verdict changed", _EMBER)], lower_better=True)
         return svg, (
             "How often the underlying choice changed when the same question was reworded in loaded "
             "terms and the options reordered. Shorter is better: a steady answer ignores the spin."
@@ -682,7 +757,8 @@ def _virtue_chart(vkey: str, entries) -> tuple[str, str]:
             (m["display_name"], [_raw(d, "hedge_density"), _raw(d, "shift_rate")]) for m, d in entries
         ]
         svg = _grouped_bars_svg(
-            groups, [("Hedging (vague words)", _EMBER), ("Walked-back claims", _GREY)]
+            groups, [("Hedging (vague words)", _EMBER), ("Walked-back claims", _GREY)],
+            lower_better=True,
         )
         return svg, (
             "The two things clarity penalises: the share of vague, non-committal words (calibrated "
@@ -696,7 +772,7 @@ def _virtue_chart(vkey: str, entries) -> tuple[str, str]:
         ]
         svg = _grouped_bars_svg(
             groups,
-            [("Coverage", _EMBER), ("Balance", _EMBER_BRIGHT), ("Conciseness", _EMBER_GLOW)],
+            [("Coverage", _EMBER), ("Balance", _STEEL), ("Conciseness", _GOLD)],
             domain=(0.0, 1.0),
         )
         return svg, (
@@ -745,12 +821,36 @@ def _charts_details(inner: str, summary: str) -> str:
     )
 
 
+def _interval_figure(entries) -> str:
+    """The honesty chart shared by every virtue: each model's published index with
+    its 95% interval, so overlapping (non-distinguishable) ranks are visible rather
+    than hidden behind a point estimate."""
+    rows = []
+    for m, d in entries:
+        s = d.get("score")
+        if s is None:
+            continue
+        ci = d.get("ci") or [None, None]
+        lo = float(ci[0]) if ci and ci[0] is not None else None
+        hi = float(ci[1]) if ci and ci[1] is not None else None
+        rows.append((m["display_name"], float(s), lo, hi))
+    if not rows:
+        return ""
+    cap = (
+        "Dot = the published index (0–100); the bar is its 95% bootstrap interval. Where two "
+        "models' bars overlap, the difference between them is within noise, so the rank order "
+        "there is not reliable."
+    )
+    return f'<figure class="chart">{_interval_svg(rows)}<figcaption>{_esc(cap)}</figcaption></figure>'
+
+
 def _virtue_chart_block(vkey: str, entries) -> str:
     svg, caption = _virtue_chart(vkey, entries)
-    if not svg:
-        return ""
-    fig = f'<figure class="chart">{svg}<figcaption>{_esc(caption)}</figcaption></figure>'
-    return _charts_details(fig, "Show the chart")
+    comp = (
+        f'<figure class="chart">{svg}<figcaption>{_esc(caption)}</figcaption></figure>' if svg else ""
+    )
+    inner = _interval_figure(entries) + comp
+    return _charts_details(inner, "Show the charts")
 
 
 # --- page sections -----------------------------------------------------------
@@ -989,8 +1089,10 @@ def _calibration_section(report: dict) -> str:
         "</tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>"
         + _charts_details(
-            _reliability_guide() + '<div class="cards">' + "".join(cards) + "</div>",
-            "Show the reliability diagrams",
+            _interval_figure(entries)
+            + _reliability_guide()
+            + '<div class="cards">' + "".join(cards) + "</div>",
+            "Show the charts",
         )
         + f"{technical}"
         "</section>"
@@ -1349,6 +1451,8 @@ footer .prov{color:var(--ink-faint);margin-top:10px;}
 .ch-track{fill:var(--ch-track);}
 .ch-alarm{fill:var(--ch-alarm);}
 .ch-axis{stroke:var(--rule-strong);}
+.ch-whisker{stroke:var(--ink-faint);}
+.ch-grid{stroke:var(--rule);}
 /* dark: recolour the few surfaces whose colours are baked in (not variable) */
 /* the "live" pill keeps the bright ember fill (matching dark accents); white text
    would be low-contrast on it, so flip the label to a deep warm ink instead */

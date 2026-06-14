@@ -39,8 +39,8 @@ The benchmark is built in two tiers:
 - No database, no service backend, no ORM. **Flat files only** (versioned JSONL
   items, JSONL run artifacts, a static site). No premature abstraction.
 - No model-access abstraction beyond a `{provider: call_fn}` dict (§7.2).
-- No **single composite score**. The leaderboard publishes a **per-virtue
-  profile** (decision recorded in §8.3).
+- **Per-virtue profile is canonical** and `report.json` carries no composite; the
+  leaderboard also shows an unweighted overall average as an at-a-glance aid (§8.3).
 
 ---
 
@@ -773,7 +773,7 @@ def aggregate(
 ) -> list[ModelMetricSummary]:
     """Group MetricScores by (model, metric). Compute per-virtue normalized
     score, raw components, bootstrap CIs, and (calibration only) ECE +
-    reliability bins. NO composite/headline number is produced (§8.3)."""
+    reliability bins. The aggregator produces no composite/headline number (§8.3)."""
     ...
 
 def to_report(summaries: Sequence[ModelMetricSummary], run_meta: Mapping) -> dict:
@@ -858,17 +858,26 @@ split is absent). Tooling: `epb manifest` (active vs reserve + split counts) and
 `epb rotate` (dry-run burn/promote/activate plan). Full policy:
 `methodology/rotation.md`.
 
-### 8.3 No composite score (decision)
+### 8.3 Composite score (decision, revisited)
 
-Per the design decision in this session, the leaderboard publishes a
-**per-virtue profile** (separate, individually-defensible scores per virtue)
-and **deliberately does not emit a single composite/headline number**. Rationale:
-a single number invites Goodharting and journalist oversimplification, both of
-which this benchmark exists to resist.
+The **per-virtue profile** is canonical: each virtue is scored, normalized, and
+published separately, and `report.json` carries **no composite field**. A single
+headline number invites Goodharting and journalist oversimplification, both of
+which this benchmark exists to resist, so the per-virtue detail is always the
+comparison that matters.
 
-> Consequence for `aggregate.py`: no weighting scheme, no headline scalar. If a
-> composite is ever reconsidered, it is an additive change to the aggregator and
-> report, not a schema change.
+The leaderboard site *additionally* renders an **unweighted average** of the
+published per-virtue indices as an at-a-glance orientation aid (the "additive
+change to the report/site, not a schema change" anticipated below). It is shown
+with its caveats stated in-page — equal weighting is an arbitrary value judgment,
+and an average can hide a real weakness behind otherwise strong marks. Models not
+scored on every live virtue get no overall and are listed last, never averaged
+over a partial set.
+
+> Consequence for `aggregate.py`: still no weighting scheme or headline scalar in
+> the aggregator; the overall average is computed at render time in the site.
+> Known limitation: the average mixes indices with different constructs and noise
+> levels, so it is an orientation aid, not a verdict.
 
 ---
 
@@ -1000,5 +1009,6 @@ epb report   --run runs/<id> --site site/out       # → static leaderboard
 - **RunUnit**: one (item, condition, model) to be executed.
 - **Operationalization / rotation group**: an interchangeable way of measuring a
   virtue; rotated across releases so the public test isn't the canonical test.
-- **Per-virtue profile**: the leaderboard's output, separate scores per virtue,
-  with no single composite.
+- **Per-virtue profile**: the canonical output, separate scores per virtue;
+  `report.json` carries no composite (the site also shows an unweighted average
+  for orientation, §8.3).
