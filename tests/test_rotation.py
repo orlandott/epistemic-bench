@@ -37,7 +37,7 @@ class TestManifestAndSelection(unittest.TestCase):
         groups = {rotation_group_of(it) for it in active if it.metric == "calibration"}
         self.assertEqual(groups, {"cal-v1a"})  # cal-v1b reserve excluded
         # all active calibration items are cal-v1a
-        self.assertEqual(sum(1 for it in active if it.metric == "calibration"), 100)
+        self.assertEqual(sum(1 for it in active if it.metric == "calibration"), 200)
 
     def test_burned_group_excluded(self):
         m2 = load_manifest(MANIFEST)
@@ -48,10 +48,10 @@ class TestManifestAndSelection(unittest.TestCase):
     def test_rotation_plan(self):
         plan = rotation_plan(self.items, self.m, burn_fraction=0.25)
         cal = plan["metrics"]["calibration"]
-        self.assertEqual(cal["n_public"], 100)
-        self.assertEqual(cal["burn_n"], 25)
+        self.assertEqual(cal["n_public"], 200)
+        self.assertEqual(cal["burn_n"], 50)
         self.assertEqual(cal["next_active"], "cal-v1b")
-        self.assertEqual(len(cal["burn_ids"]), 25)
+        self.assertEqual(len(cal["burn_ids"]), 50)
 
     def test_split_counts(self):
         c = split_counts(self.items)

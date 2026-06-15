@@ -46,6 +46,42 @@ spreads the correct-answer letter evenly across A/B/C/D so the key cannot be
 gamed positionally; sycophancy is balanced 50 true / 50 false. The `cal-v1b`
 reserve pool (8 items) is unchanged.
 
+## v1.2 (2026-06-15) — second depth tier: 200 items per active operationalization
+
+Doubled every active public operationalization to **200 items** (1,400 active
+public items total). This pushes each area toward the depth where realistic
+~0.08–0.10 frontier gaps become resolvable; judge-scored areas still benefit
+from more, and the most templated areas (`framing`, `clarity`) are the first
+candidates for a discrimination filter before deepening further.
+
+| Metric | Items | Seed | Generated |
+|---|---|---|---|
+| calibration (`cal-v1a`) | 200 | 30 | 170 |
+| sycophancy (`syc-v1a`) | 200 | 20 | 180 |
+| creator_bias (`cb-v1a`) | 200 | 14 | 186 |
+| framing (`fr-v1a`) | 200 | 10 | 190 |
+| clarity (`clr-v1a`) | 200 | 10 | 190 |
+| pedantic (`ped-v1a`) | 200 | 6 | 194 |
+| thoroughness (`thr-v1a`) | 200 | 6 | 194 |
+
+How the additional items were sourced (same idempotent generator, same
+`batch:v1-100` marker tag):
+
+- **calibration / sycophancy** — topped up from **truth tables** (country→capital,
+  element→symbol/atomic-number, and computed arithmetic), so every added answer
+  key and truth label is correct by construction rather than hand-asserted.
+  Sycophancy remains balanced 100 YES / 100 NO; calibration answer letters stay
+  spread across A/B/C/D.
+- **framing** — 20 additional equivalent-framing scenarios (attribute/goal
+  framing), each with neutral / loaded-positive / loaded-negative / order-swapped
+  conditions.
+- **creator_bias, clarity, pedantic, thoroughness** — extra curated prose pools
+  in `scripts/_pool_{cb,clr,ped,thr}.py`, deduped against the existing pools.
+  Pedantic items assert only what their three bundled sources state.
+
+Verified at build time: all items pass `epb validate`; zero duplicate ids and
+zero duplicate prompt/claim/position/frame text within any file.
+
 Split/rotation control: `manifest.yaml` (bank version, canonical split, active
 operationalization per metric). Private split (canonical, held out) lives in a
 separate access-controlled repo; `private.example/` is the format template.
@@ -76,3 +112,9 @@ Judge-validation gold samples: `validation/judge/{pedantic,thoroughness}.sample.
   `batch:v1-100` tag). Balanced calibration answer keys and 50/50 sycophancy
   truth labels. Updated `tests/test_rotation.py` count assertions (calibration
   active 30→100, burn_n 7→25).
+- **v1.2 second depth tier:** doubled every active operationalization to 200
+  items (1,204 generated items total). Calibration/sycophancy top-ups generated
+  from truth tables (correct by construction); framing extended with 20 new
+  scenarios; creator_bias/clarity/pedantic/thoroughness extended from curated
+  pools in `scripts/_pool_*.py`. Updated `tests/test_rotation.py` (calibration
+  active 100→200, burn_n 25→50).
