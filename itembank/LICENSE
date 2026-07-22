@@ -1,0 +1,15 @@
+The epistemic-bench public item bank (every *.jsonl file under itembank/,
+including private.example/) is licensed under the Creative Commons
+Attribution 4.0 International License (CC BY 4.0).
+
+You are free to share and adapt this data for any purpose, including
+commercially, provided you give appropriate credit, link to the license,
+and indicate if changes were made.
+
+Full license text: https://creativecommons.org/licenses/by/4.0/legalcode
+Human-readable summary: https://creativecommons.org/licenses/by/4.0/
+
+Attribution: "epistemic-bench item bank" — https://github.com/orlandott/epistemic-bench
+
+The benchmark code in this repository is separately licensed under the
+Apache License 2.0 (see the LICENSE file at the repository root).

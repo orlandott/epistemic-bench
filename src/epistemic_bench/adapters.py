@@ -1,9 +1,16 @@
 """Model access (SPEC §7.2).
 
 The *entire* abstraction is a ``{provider: call_fn}`` dict where each call_fn is
-``(prompt, params) -> awaitable[str]``. Real providers are key-gated stubs (the
-SDKs are optional deps); a deterministic ``mock`` provider drives the pipeline
-end to end without network or keys.
+``(prompt, params) -> awaitable[str | (str, usage_dict)]``. Real providers are
+implemented behind lazy imports of their optional SDK dependencies
+(``pip install 'epistemic-bench[anthropic]'`` etc.) plus an API-key environment
+variable; a deterministic ``mock`` provider drives the pipeline end to end
+without network or keys.
+
+A missing SDK or key raises ``AdapterConfigError`` — the runner captures it on
+the Completion without retrying (retries are for transient failures only). Real
+adapters use ``params['model_version']`` (the pinned version from the model
+registry) as the concrete API model name, falling back to ``params['model']``.
 
 The mock is a **synthetic data generator for demos/tests, not a model.** It is
 constructed with access to ground truth (via a closure over the item bank) so it
@@ -13,34 +20,157 @@ ground truth. Any leaderboard built from mock data is stamped ``demo: true``.
 
 from __future__ import annotations
 
+import asyncio
+import os
 import random
 import zlib
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Iterable, Mapping
+from typing import Any, Awaitable, Callable, Iterable, Mapping, Tuple, Union
 
 import yaml
 
 from .types import Item, ModelInfo
 
-CallFn = Callable[[str, Mapping[str, Any]], Awaitable[str]]
+# Adapters may return the raw text alone, or (text, usage) where usage carries
+# provider metadata such as token counts; the runner normalizes either shape.
+AdapterResult = Union[str, Tuple[str, Mapping[str, Any]]]
+CallFn = Callable[[str, Mapping[str, Any]], Awaitable[AdapterResult]]
 
 
-def _stub(provider: str, pkg: str, env: str) -> CallFn:
-    async def call(prompt: str, params: Mapping[str, Any]) -> str:
-        raise RuntimeError(
-            f"provider '{provider}' is not configured in this build. "
-            f"Install `{pkg}`, set {env}, and wire the real call in adapters.py."
+class AdapterConfigError(RuntimeError):
+    """Provider is not usable as configured (missing SDK or API key).
+
+    Raised instead of a transient error so the runner records it once instead of
+    retrying with backoff.
+    """
+
+
+def _model_name(params: Mapping[str, Any]) -> str:
+    return str(params.get("model_version") or params.get("model") or "")
+
+
+def _require_env(provider: str, name: str) -> str:
+    val = os.environ.get(name, "")
+    if not val:
+        raise AdapterConfigError(f"provider '{provider}' requires the {name} environment variable")
+    return val
+
+
+def _require_sdk(provider: str, module: str, extra: str):
+    try:
+        import importlib
+
+        return importlib.import_module(module)
+    except ImportError as e:
+        raise AdapterConfigError(
+            f"provider '{provider}' requires the `{module.split('.')[0]}` SDK: "
+            f"pip install 'epistemic-bench[{extra}]'"
+        ) from e
+
+
+def _make_anthropic() -> CallFn:
+    client = None  # cached per process; each CLI invocation runs one event loop
+
+    async def call(prompt: str, params: Mapping[str, Any]) -> AdapterResult:
+        nonlocal client
+        anthropic = _require_sdk("anthropic", "anthropic", "anthropic")
+        _require_env("anthropic", "ANTHROPIC_API_KEY")
+        if client is None:
+            client = anthropic.AsyncAnthropic()
+        resp = await client.messages.create(
+            model=_model_name(params),
+            max_tokens=int(params.get("max_tokens", 1024)),
+            temperature=float(params.get("temperature", 0.0)),
+            messages=[{"role": "user", "content": prompt}],
         )
+        text = "".join(getattr(b, "text", "") for b in resp.content if getattr(b, "type", None) == "text")
+        u = getattr(resp, "usage", None)
+        usage = {"input_tokens": getattr(u, "input_tokens", None), "output_tokens": getattr(u, "output_tokens", None)}
+        return text, usage
 
     return call
 
 
-# Real providers: stubs until configured. Shape matches the spec's ADAPTERS dict.
+def _make_openai_compatible(provider: str, *, key_env: str, base_url_env: str | None = None) -> CallFn:
+    """OpenAI adapter; with ``base_url_env`` it also serves any OpenAI-compatible
+    endpoint (vLLM, TGI, llama.cpp server, hosted open-weight providers)."""
+    client = None
+
+    async def call(prompt: str, params: Mapping[str, Any]) -> AdapterResult:
+        nonlocal client
+        openai = _require_sdk(provider, "openai", "openai")
+        if client is None:
+            if base_url_env:
+                base_url = os.environ.get(base_url_env, "")
+                if not base_url:
+                    raise AdapterConfigError(
+                        f"provider '{provider}' requires the {base_url_env} environment variable "
+                        "(an OpenAI-compatible endpoint URL)"
+                    )
+                client = openai.AsyncOpenAI(base_url=base_url, api_key=os.environ.get(key_env, "EMPTY"))
+            else:
+                _require_env(provider, key_env)
+                client = openai.AsyncOpenAI()
+        resp = await client.chat.completions.create(
+            model=_model_name(params),
+            messages=[{"role": "user", "content": prompt}],
+            temperature=float(params.get("temperature", 0.0)),
+            max_tokens=int(params.get("max_tokens", 1024)),
+        )
+        text = (resp.choices[0].message.content or "") if resp.choices else ""
+        u = getattr(resp, "usage", None)
+        usage = {"input_tokens": getattr(u, "prompt_tokens", None), "output_tokens": getattr(u, "completion_tokens", None)}
+        return text, usage
+
+    return call
+
+
+def _make_google() -> CallFn:
+    async def call(prompt: str, params: Mapping[str, Any]) -> AdapterResult:
+        genai = _require_sdk("google", "google.generativeai", "google")
+        key = _require_env("google", "GOOGLE_API_KEY")
+        genai.configure(api_key=key)
+        model = genai.GenerativeModel(_model_name(params))
+
+        def _generate():
+            return model.generate_content(
+                prompt,
+                generation_config={
+                    "temperature": float(params.get("temperature", 0.0)),
+                    "max_output_tokens": int(params.get("max_tokens", 1024)),
+                },
+            )
+
+        resp = await asyncio.to_thread(_generate)  # SDK is sync; keep the loop free
+        try:
+            text = resp.text
+        except Exception:  # blocked/empty candidates: extract what parts exist
+            parts = []
+            for cand in getattr(resp, "candidates", None) or []:
+                for part in getattr(getattr(cand, "content", None), "parts", None) or []:
+                    t = getattr(part, "text", None)
+                    if t:
+                        parts.append(t)
+            text = "".join(parts)
+        um = getattr(resp, "usage_metadata", None)
+        usage = (
+            {"input_tokens": getattr(um, "prompt_token_count", None), "output_tokens": getattr(um, "candidates_token_count", None)}
+            if um is not None
+            else {}
+        )
+        return text, usage
+
+    return call
+
+
+# Real providers (SPEC §7.2): lazy SDK imports + env keys; the shape stays a dict.
 ADAPTERS: dict[str, CallFn] = {
-    "anthropic": _stub("anthropic", "anthropic", "ANTHROPIC_API_KEY"),
-    "openai": _stub("openai", "openai", "OPENAI_API_KEY"),
-    "google": _stub("google", "google-generativeai", "GOOGLE_API_KEY"),
-    "openweights": _stub("openweights", "<your-runtime>", "OPENWEIGHTS_ENDPOINT"),
+    "anthropic": _make_anthropic(),
+    "openai": _make_openai_compatible("openai", key_env="OPENAI_API_KEY"),
+    "google": _make_google(),
+    "openweights": _make_openai_compatible(
+        "openweights", key_env="OPENWEIGHTS_API_KEY", base_url_env="OPENWEIGHTS_BASE_URL"
+    ),
 }
 
 

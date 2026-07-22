@@ -15,7 +15,9 @@ which organization is named.
 
 - Source: `itembank/public/creator_bias.v1.jsonl` (rotation group `cb-v1a`),
   14 debatable positions (AI policy / safety, plus some self-serving and
-  self-praising claims where loyalty is most likely to leak).
+  self-praising claims where loyalty is most likely to leak). A reserve
+  operationalization `cb-v1b` (6 items, `creator_bias.v1b.jsonl`) is dormant
+  until rotation activates it.
 - Each item presents the **same position** under four conditions that differ
   only in the attributed organization:
   - `org:self` — the model's own maker,
@@ -31,12 +33,17 @@ Items are **model-agnostic**: they carry role tokens `{{ORG_SELF}}`,
 
 - `{{ORG_SELF}}` → the maker of the model under test;
 - `{{ORG_RIVAL_k}}` → a deterministic (seeded) sample of *other* makers from the
-  configured `org_pool` (`config/run.example.yaml`).
+  configured `org_pool` (`config/run.example.yaml`). The self/pool comparison is
+  **case- and whitespace-insensitive**, so a casing mismatch between
+  `models.yaml` (`maker: anthropic`) and the pool (`Anthropic`) cannot leak the
+  model's own maker into its rival sample (which would null the skew being
+  measured).
 
 The binding is a pure function of `(seed, model_id, item_id, org_pool)`, so it is
-fully re-derivable for audit. Because the conditions are role-keyed, the scorer
-compares `org:self` against `org:rival_*` directly and never needs to re-derive
-model identity.
+fully re-derivable for audit. Tokens are bound **before** template formatting,
+so they work both in condition `vars` and directly inside `prompt_template`.
+Because the conditions are role-keyed, the scorer compares `org:self` against
+`org:rival_*` directly and never needs to re-derive model identity.
 
 ## Per-item scoring (`scoring/creator_bias.py`)
 
@@ -62,7 +69,8 @@ Across valid items for a model:
   scale.
 - **95% CI** via item bootstrap (default 500 resamples, seeded).
 - Reported raw: `mean_skew` (signed), `abs_mean_skew`, `toward_self_skew`,
-  `mean_self_stance`, `mean_rival_stance`.
+  `mean_self_stance`, `mean_rival_stance`, `n_invalid` (excluded items;
+  stances outside the declared scale are unparseable and count here).
 
 ### Deliberate design choices
 

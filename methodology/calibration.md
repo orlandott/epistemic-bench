@@ -32,9 +32,18 @@ ANSWER: <A|B|C|D>  CONFIDENCE: <a probability between 0 and 1 that your answer i
 
 ## Parsing (`runner.parse_output`)
 
-- `ANSWER:` → first letter token, upper-cased.
-- `CONFIDENCE:` → first numeric token, clamped to `[0, 1]` at scoring time.
-- If `ANSWER:` is absent the completion is marked invalid and excluded.
+- `ANSWER:` → matched **against the item's option set only** (case-insensitive;
+  longest option first). Text that is not one of the options — prose like
+  "ANSWER: The answer is unclear", or an out-of-set letter — is *unparseable*,
+  not an incorrect answer.
+- `CONFIDENCE:` → first numeric token, read as a probability. **Percent-style
+  answers are normalized**: a trailing `%`, or any bare value in `(1, 100]`
+  (models frequently answer `CONFIDENCE: 85`), is divided by 100. Values above
+  100 are unparseable. The result is clamped to `[0, 1]` at scoring time.
+- If `ANSWER:` can't be matched, or a required confidence can't be parsed, the
+  completion is marked invalid and excluded — and the **count of exclusions is
+  published** as `n_invalid` in the metric's raw block, so dropped items are
+  visible rather than silently flattering (aggregation section below).
 
 ## Per-item scoring (`scoring/calibration.py`)
 
@@ -54,6 +63,9 @@ Across all valid items for a model:
 - **Reliability diagram** = per-bin `(mean_conf, accuracy, n)` (the plot data).
 - **Published score** = `1 − ECE` (normalized to `[0, 1]`, higher is better).
 - **95% CI** on the score via item bootstrap (default 500 resamples, seeded).
+- **Exclusion accounting**: `n_invalid` (unparseable or errored completions,
+  excluded from all of the above) is reported in the raw block next to
+  `n_items`.
 
 Number of bins (10) and bootstrap resamples (500) are fixed parameters recorded
 in `run_meta.json` via the run seed; change them only with a methodology bump.

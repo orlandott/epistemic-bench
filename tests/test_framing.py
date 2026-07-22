@@ -53,6 +53,7 @@ class TestFramingScorer(unittest.TestCase):
         self.assertTrue(s.valid)
         self.assertAlmostEqual(s.value, 0.0)  # canonical 'accept' everywhere
         self.assertAlmostEqual(s.components["stability"], 1.0)
+        self.assertAlmostEqual(s.components["modal_agreement"], 1.0)
 
     def test_wording_flip_counts(self):
         # neutral=accept; positive flips to reject (canonical change); order_swapped B=accept (no change)
@@ -63,6 +64,8 @@ class TestFramingScorer(unittest.TestCase):
         }
         s = score_framing(_item(), comps, _ctx())
         self.assertAlmostEqual(s.value, 0.5)  # 1 of 2 non-neutral framings flipped
+        # modal option is 'accept' (neutral + order_swapped) over 3 parseable conditions
+        self.assertAlmostEqual(s.components["modal_agreement"], 2 / 3)
 
     def test_missing_neutral_is_invalid(self):
         s = score_framing(_item(), {"loaded_positive": _comp("loaded_positive", "A")}, _ctx())

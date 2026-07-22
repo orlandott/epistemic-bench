@@ -20,6 +20,8 @@ see `methodology/rotation.md`.
 
 from __future__ import annotations
 
+import random
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Mapping, Optional
@@ -82,23 +84,31 @@ def select_active(items: Iterable[Item], manifest: Manifest) -> list[Item]:
     return out
 
 
-def rotation_plan(items: Iterable[Item], manifest: Manifest, *, burn_fraction: float = 0.25) -> dict:
+def rotation_plan(items: Iterable[Item], manifest: Manifest, *, burn_fraction: float = 0.25, seed: int = 0) -> dict:
     """Dry-run plan for the next release: per metric, which public items in the
     active group would be burned, and the public/private balance. Reporting only —
-    minting new private items is a maintainer step."""
+    minting new private items is a maintainer step.
+
+    Burned items are a **seeded random sample** (stamped in the plan), not a
+    file-order prefix: a predictable burn order would let labs anticipate which
+    public items survive into the next release.
+    """
     items = list(items)
-    plan = {"release_from": manifest.release, "burn_fraction": burn_fraction, "metrics": {}}
+    plan = {"release_from": manifest.release, "burn_fraction": burn_fraction, "seed": seed, "metrics": {}}
     for metric, active in manifest.active.items():
         in_group = [it for it in items if rotation_group_of(it) == active]
         public = [it for it in in_group if it.split == "public"]
         private = [it for it in in_group if it.split == "private"]
         reserves = [g for g in manifest.operationalizations.get(metric, []) if g != active and g not in manifest.burned]
+        burn_n = int(len(public) * burn_fraction)
+        rng = random.Random(zlib.crc32(f"{seed}|{manifest.release}|{metric}|burn".encode("utf-8")))
+        burn_ids = sorted(rng.sample([it.id for it in public], burn_n)) if burn_n else []
         plan["metrics"][metric] = {
             "active": active,
             "n_public": len(public),
             "n_private": len(private),
-            "burn_n": int(len(public) * burn_fraction),
-            "burn_ids": [it.id for it in public[: int(len(public) * burn_fraction)]],
+            "burn_n": burn_n,
+            "burn_ids": burn_ids,
             "reserve_operationalizations": reserves,
             "next_active": reserves[0] if reserves else active,
         }

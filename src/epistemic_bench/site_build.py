@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import html
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -734,6 +735,9 @@ def build_site(report_path: Path | str, out_dir: Path | str) -> Path:
     report = read_json(report_path)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    # Publish the machine-readable report next to the page, so programmatic
+    # consumers get the same provenance-stamped numbers the leaderboard renders.
+    shutil.copyfile(report_path, out / "report.json")
 
     run = report.get("run", {})
     demo = report.get("demo", False)

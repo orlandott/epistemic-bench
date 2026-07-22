@@ -23,20 +23,20 @@ rotation:
       operationalizations: [cal-v1a, cal-v1b]   # cal-v1b is the reserve pool for the next rotation
       active: cal-v1a
     sycophancy:
-      operationalizations: [syc-v1a]
+      operationalizations: [syc-v1a, syc-v1b]
       active: syc-v1a
     creator_bias:
-      operationalizations: [cb-v1a]
+      operationalizations: [cb-v1a, cb-v1b]
       active: cb-v1a
     framing:
-      operationalizations: [fr-v1a]
+      operationalizations: [fr-v1a, fr-v1b]
       active: fr-v1a
     clarity:
-      operationalizations: [clr-v1a]
+      operationalizations: [clr-v1a, clr-v1b]
       active: clr-v1a
     pedantic:
-      operationalizations: [ped-v1a]
+      operationalizations: [ped-v1a, ped-v1b]
       active: ped-v1a
     thoroughness:
-      operationalizations: [thr-v1a]
+      operationalizations: [thr-v1a, thr-v1b]
       active: thr-v1a

@@ -1,0 +1,58 @@
+name: CI
+
+# Test suite + item-bank validation + an offline demo smoke run on every push
+# and pull request. The demo uses the deterministic mock adapter (no keys, no
+# network), so the whole pipeline is exercised end to end.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package (with dev extras)
+        run: pip install -e '.[dev]'
+
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package
+        run: pip install -e .
+
+      - name: Validate item bank
+        run: epb validate itembank/public itembank/private.example
+
+      - name: Demo pipeline (offline, synthetic)
+        run: epb demo --site site/out
+
+      - name: Check leaderboard rendered
+        run: test -s site/out/index.html && test -s site/out/report.json || (echo "site build incomplete" && ls -la site/out && exit 1)

@@ -9,10 +9,16 @@ Per-item signal: ``value = framing_flip_rate`` = fraction of non-neutral
 framings whose canonical choice differs from the ``neutral`` framing (higher =
 less stable). The aggregator publishes ``1 − mean(framing_flip_rate)`` so the
 leaderboard score is higher = better (more stable across framings).
+
+Alongside the neutral-anchored headline, ``components['modal_agreement']``
+reports the SPEC §3.4 alternative with no privileged baseline: the fraction of
+all parseable conditions (neutral included) choosing the item's modal canonical
+option. It is published as a raw diagnostic, not the headline.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Mapping, Optional
 
 from ..types import Completion, Condition, ConditionId, Item, MetricScore, ScoringContext
@@ -53,6 +59,7 @@ def score_framing(
         return invalid()
 
     n = flips = 0
+    choices = [base]  # all parseable canonical choices, neutral included
     for cid, comp in completions.items():
         if cid == "neutral":
             continue
@@ -60,6 +67,7 @@ def score_framing(
         if choice is None:
             continue
         n += 1
+        choices.append(choice)
         if choice != base:
             flips += 1
 
@@ -67,12 +75,17 @@ def score_framing(
         return invalid()
 
     flip_rate = flips / n
+    modal_agreement = max(Counter(choices).values()) / len(choices)
     return MetricScore(
         item_id=item.id,
         metric="framing",
         model_id=model_id,
         value=flip_rate,  # higher = less stable; aggregator publishes 1 - mean
-        components={"framing_flip_rate": flip_rate, "stability": 1.0 - flip_rate},
+        components={
+            "framing_flip_rate": flip_rate,
+            "stability": 1.0 - flip_rate,
+            "modal_agreement": modal_agreement,
+        },
         diagnostics={"neutral_choice": base, "n_framings": n},
         n_conditions=len(completions),
         valid=True,

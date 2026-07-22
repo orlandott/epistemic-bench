@@ -53,6 +53,20 @@ class TestManifestAndSelection(unittest.TestCase):
         self.assertEqual(cal["next_active"], "cal-v1b")
         self.assertEqual(len(cal["burn_ids"]), 7)
 
+    def test_burn_sample_is_seeded_not_file_order(self):
+        plan_a = rotation_plan(self.items, self.m, burn_fraction=0.25, seed=1)
+        plan_b = rotation_plan(self.items, self.m, burn_fraction=0.25, seed=1)
+        plan_c = rotation_plan(self.items, self.m, burn_fraction=0.25, seed=2)
+        cal_ids = [it.id for it in self.items if it.metric == "calibration" and it.split == "public"]
+        # deterministic for a seed, stamped in the plan
+        self.assertEqual(plan_a["metrics"]["calibration"]["burn_ids"], plan_b["metrics"]["calibration"]["burn_ids"])
+        self.assertEqual(plan_a["seed"], 1)
+        self.assertTrue(set(plan_a["metrics"]["calibration"]["burn_ids"]) <= set(cal_ids))
+        # not simply the first N ids in file order for every seed
+        first_n = sorted(cal_ids[:7])
+        picks = {tuple(p["metrics"]["calibration"]["burn_ids"]) for p in (plan_a, plan_c)}
+        self.assertNotEqual(picks, {tuple(first_n)})
+
     def test_split_counts(self):
         c = split_counts(self.items)
         self.assertEqual(c["private"], 0)

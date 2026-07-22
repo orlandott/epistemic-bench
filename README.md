@@ -93,43 +93,78 @@ reproducible-but-not-held-out. See `methodology/rotation.md` and
 
 ## Evaluating real models
 
-Set a model's `provider` in `config/models.example.yaml` to `anthropic`,
-`openai`, `google`, or `openweights`, pin its `version`, then implement the real
-call in `src/epistemic_bench/adapters.py` (the provider SDKs are optional
-dependencies) and set the relevant API key. The `mock:` profile block is ignored
-by real providers. Real adapters never receive ground truth.
+Real adapters for `anthropic`, `openai`, `google`, and `openweights` (any
+OpenAI-compatible endpoint: vLLM, TGI, llama.cpp server, …) are implemented in
+`src/epistemic_bench/adapters.py`. To use one:
+
+1. Install its SDK extra: `pip install -e '.[anthropic]'` (or `openai`, `google`;
+   `openweights` uses the `openai` extra).
+2. Set the key: `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` /
+   `OPENWEIGHTS_BASE_URL` (+ optional `OPENWEIGHTS_API_KEY`).
+3. In `config/models.example.yaml`, set the model's `provider` and pin its exact
+   API `version` — the adapter calls `version` (falling back to the registry
+   `id`), and the pin is stamped into every report for provenance.
+
+The `mock:` profile block is ignored by real providers. Real adapters never
+receive ground truth; they return the raw text plus token usage, which lands in
+`completions.jsonl` together with per-call latency and retry counts.
+
+Runs are built to survive the real world: transient failures retry with
+exponential backoff (`max_retries` / `retry_base_delay` in the run config;
+missing-key/SDK errors are never retried), completions stream to disk batch by
+batch, and an interrupted run finishes with
+
+```bash
+epb run --resume runs/<run_id>     # keeps successes, re-executes missing/errored units
+```
+
+For the v2 judge metrics on real runs, pin a judge in the run config
+(`judge.provider` / `judge.model` / `judge.maker`). The judge refuses to score
+models sharing its maker (SPEC §10) — see `methodology/judge-validation.md`.
 
 ## Tests
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s tests -v
+PYTHONPATH=src python -m unittest discover -s tests -v   # stdlib only
+# or, with the dev extras (adds pytest and the JSON-Schema cross-check):
+pip install -e '.[dev]' && pytest tests/
 ```
+
+CI (`.github/workflows/ci.yml`) runs the suite on Python 3.10–3.13, validates
+the item bank, and smoke-runs the offline demo pipeline on every push.
 
 ## Layout
 
 ```
-itembank/        versioned JSONL item bank + manifest.yaml (split/rotation control) + JSON Schema
-  public/        public split (reproducible reference)
+itembank/        versioned JSONL item bank + manifest.yaml (split/rotation control)
+  SCHEMA.md      prose schema doc; schema/item.schema.json is the JSON Schema
+  LICENSE        data license notice (CC BY 4.0; code is Apache-2.0, see /LICENSE)
+  public/        public split (reproducible reference; *.v1b.jsonl = reserve groups)
   private.example/ template for the separate access-controlled private split
 src/epistemic_bench/
   types.py       core dataclasses
   itembank.py    load + validate JSONL
-  adapters.py    {provider: call_fn} dict + mock generator + model registry loader
-  runner.py      expand conditions/org-roles, async+batched calls, dump completions
+  adapters.py    {provider: call_fn} dict — real anthropic/openai/google/openweights
+                   adapters (lazy SDK imports) + mock generator + registry loader
+  runner.py      expand conditions/org-roles; async+batched calls with retry/backoff,
+                   streamed completions, resume support
   scoring/       Scorer protocol + registry; v1 + v2 scorers
-    judge/       v2 judge client, pinned rubrics, pedantic + thoroughness scorers
-  aggregate.py   per-model×metric summaries + bootstrap CI; split + v2 publication gates
-  rotation.py    manifest, active-operationalization selection, rotation plan (SPEC §8)
+    judge/       v2 judge client (real judge + cross-maker gate), pinned rubrics,
+                   pedantic + thoroughness scorers
+  aggregate.py   per-model×metric summaries + bootstrap CI + exclusion accounting;
+                   split + v2 publication gates
+  rotation.py    manifest, active-operationalization selection, seeded rotation plan
   validation.py  judge-validation gate: Cohen's κ / Pearson r vs human sample
   report.py      report.json writer
-  site_build.py  static leaderboard (inline-SVG reliability diagrams)
-  cli.py         epb: validate | run | score | aggregate | report | validate-judge | manifest | rotate | demo
-config/          example models + run parameters (incl. judge thresholds)
+  site_build.py  static leaderboard (inline-SVG reliability diagrams) + report.json copy
+  cli.py         epb: validate | run [--resume] | score | aggregate | report |
+                   validate-judge | manifest | rotate | demo
+config/          example models + run parameters (incl. retries + judge pinning)
 methodology/     reproducible per-metric methodology docs (auditability)
 validation/judge/ human-labeled gold samples for the judge gate (*.sample.jsonl)
 runs/            run artifacts (gitignored)
 site/out/        rendered leaderboard (gitignored)
-tests/           unittest suite
+tests/           unittest suite (pytest-compatible)
 ```
 
 ### Notes / deviations from SPEC layout
@@ -143,7 +178,10 @@ tests/           unittest suite
 - The **private held-out split** (SPEC §8.1) lives in a separate
   access-controlled repo; the loader accepts multiple item-bank roots so
   maintainers merge it at eval time.
+- **Adapter contract** extends SPEC §7.2: a call fn may return either the raw
+  text (as specified) or `(text, usage)`, so real adapters can record token
+  usage; the runner accepts both and adds latency + retry counts.
 
 ## License
 
-Apache-2.0 (code). Public item bank: CC-BY-4.0. See SPEC §6 (license OPEN).
+Code: [Apache-2.0](LICENSE). Public item bank: [CC BY 4.0](itembank/LICENSE).

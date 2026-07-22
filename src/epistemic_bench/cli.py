@@ -28,7 +28,7 @@ from .aggregate import aggregate, to_report
 from .itembank import load_items, validate_file
 from .jsonlio import read_json, read_jsonl, write_json, write_jsonl
 from .report import write_report
-from .runner import RunConfig, expand, run, run_id
+from .runner import RunConfig, expand, load_completed, run, run_id
 from .scoring import JUDGED_METRICS, get_scorer  # noqa: F401  (import populates SCORERS)
 from .scoring.judge.judge_client import make_mock_judge, make_real_judge
 from .scoring.judge.rubric import RUBRIC_VERSION
@@ -115,7 +115,11 @@ def do_run(
         max_tokens=int(rc.get("max_tokens", 1024)),
         seed=seed,
         org_pool=tuple(rc.get("org_pool", [])),
+        max_retries=int(rc.get("max_retries", 2)),
+        retry_base_delay=float(rc.get("retry_base_delay", 1.0)),
     )
+    if not cfg.org_pool and any(it.metric == "creator_bias" for it in items):
+        print("  [warn] creator_bias items present but run config has no org_pool; rival roles fall back to a generic org")
     adapters = build_adapters(registry, items, profiles, seed)
     units = expand(items, cfg)
     asyncio.run(run(units, adapters, registry, cfg))
@@ -134,12 +138,18 @@ def do_run(
         "split_counts": rotation_mod.split_counts(items),
         "active_operationalizations": active_ops,
         "seed": seed,
+        # Enough to rebuild the exact unit set for `epb run --resume`.
+        "metric_filter": metric,
+        "manifest_path": str(manifest_path) if manifest_path else None,
+        "rotate": bool(rotate),
         "params": {
             "concurrency": cfg.concurrency,
             "batch_size": cfg.batch_size,
             "temperature": cfg.temperature,
             "max_tokens": cfg.max_tokens,
             "org_pool": list(cfg.org_pool),
+            "max_retries": cfg.max_retries,
+            "retry_base_delay": cfg.retry_base_delay,
         },
         "code_sha": _git_sha(),
         "n_units": len(units),
@@ -158,6 +168,48 @@ def do_run(
         f"(bank {bank_version}, splits public={sc.get('public',0)}/private={sc.get('private',0)}"
         f"{', rotated to active operationalizations' if (manifest and rotate) else ''}) -> {run_dir}/completions.jsonl"
     )
+    return run_dir
+
+
+def do_resume(run_dir: str | Path) -> Path:
+    """Finish an interrupted run: re-expand the same unit set from run_meta.json,
+    keep every successful completion already on disk, and execute only what's
+    missing or errored (`epb run --resume runs/<id>`)."""
+    run_dir = Path(run_dir)
+    run_meta = read_json(run_dir / "run_meta.json")
+    registry = {m["id"]: modelinfo_from_dict(m) for m in run_meta["models"]}
+    profiles = run_meta.get("mock_profiles", {})
+    seed = int(run_meta.get("seed", 0))
+    params = run_meta.get("params", {})
+
+    items = load_items(*run_meta["itembank_roots"], splits=("public", "private"))
+    manifest_path = run_meta.get("manifest_path")
+    if run_meta.get("rotate", True) and manifest_path and Path(manifest_path).exists():
+        items = rotation_mod.select_active(items, rotation_mod.load_manifest(manifest_path))
+    metric = run_meta.get("metric_filter")
+    if metric:
+        items = [it for it in items if it.metric == metric]
+
+    cfg = RunConfig(
+        models=list(registry.values()),
+        out_dir=run_dir,
+        concurrency=int(params.get("concurrency", 16)),
+        batch_size=int(params.get("batch_size", 32)),
+        temperature=float(params.get("temperature", 0.0)),
+        max_tokens=int(params.get("max_tokens", 1024)),
+        seed=seed,
+        org_pool=tuple(params.get("org_pool", [])),
+        max_retries=int(params.get("max_retries", 2)),
+        retry_base_delay=float(params.get("retry_base_delay", 1.0)),
+    )
+    adapters = build_adapters(registry, items, profiles, seed)
+    units = expand(items, cfg)
+    n_done = len(load_completed(run_dir / "completions.jsonl"))
+    asyncio.run(run(units, adapters, registry, cfg, resume=True))
+
+    run_meta.setdefault("resumed_at", []).append(_now())
+    write_json(run_dir / "run_meta.json", run_meta)
+    print(f"[run] resumed {run_dir}: {n_done} unit(s) already complete, {len(units) - n_done} executed")
     return run_dir
 
 
@@ -181,30 +233,42 @@ def do_score(run_dir: str | Path, itembank_roots: Optional[Sequence[str]] = None
             judge_id=run_meta.get("judge", {}).get("id", "mock-judge-v1"),
         )
     else:
-        judge = make_real_judge(run_meta.get("judge", {}).get("id", ""))
+        judge = make_real_judge(run_meta.get("judge", {}), registry)
 
     scores = []
-    skipped_metrics: set[str] = set()
+    skipped_metrics: dict[str, int] = {}
+    missing_items: set[str] = set()
     for (iid, mid), cmap in grouped.items():
         item = items_by_id.get(iid)
         if item is None:
+            # Typically: the run loaded a private root that isn't loaded now.
+            missing_items.add(iid)
             continue
         try:
             scorer = get_scorer(item.metric)
         except KeyError:
-            skipped_metrics.add(item.metric)
+            skipped_metrics[item.metric] = skipped_metrics.get(item.metric, 0) + 1
             continue
         ctx = ScoringContext(model=registry.get(mid, ModelInfo(mid, "mock", "", mid)), judge=judge)
         try:
             scores.append(replace(scorer(item, cmap, ctx), split=item.split))  # stamp the item's split
         except (NotImplementedError, RuntimeError):
-            skipped_metrics.add(item.metric)  # stub, or judge not configured
+            # No scorer body, judge unconfigured, or judge refused (same-maker gate).
+            skipped_metrics[item.metric] = skipped_metrics.get(item.metric, 0) + 1
 
     path = write_jsonl(run_dir / "scores.jsonl", (metricscore_to_dict(s) for s in scores))
     msg = f"[score] {len(scores)} scores -> {path}"
     if skipped_metrics:
-        msg += f"  (skipped stub metrics: {', '.join(sorted(skipped_metrics))})"
+        detail = ", ".join(f"{m} ({n} groups)" for m, n in sorted(skipped_metrics.items()))
+        msg += f"  (skipped — unimplemented, judge unconfigured, or judge-gated: {detail})"
     print(msg)
+    if missing_items:
+        example = sorted(missing_items)[0]
+        print(
+            f"  [warn] {len(missing_items)} item(s) referenced by completions were not found in the loaded "
+            f"item-bank roots (e.g. {example}); their completions were NOT scored. If the run used a private "
+            f"split, re-score with:  epb score --run {run_dir} --itembank <public root> <private root>"
+        )
     return path
 
 
@@ -287,11 +351,15 @@ def do_rotate_plan(
     manifest_path: str = DEFAULT_MANIFEST,
     itembank_roots: Sequence[str] = DEFAULT_ITEMBANK,
     burn_fraction: float = 0.25,
+    seed: int = 0,
 ) -> None:
     m = rotation_mod.load_manifest(manifest_path)
     items = load_items(*itembank_roots, splits=("public", "private"))
-    plan = rotation_mod.rotation_plan(items, m, burn_fraction=burn_fraction)
-    print(f"Rotation plan from release {plan['release_from']} (burn {int(burn_fraction*100)}% of active public items):\n")
+    plan = rotation_mod.rotation_plan(items, m, burn_fraction=burn_fraction, seed=seed)
+    print(
+        f"Rotation plan from release {plan['release_from']} "
+        f"(burn {int(burn_fraction*100)}% of active public items, seeded sample, seed={seed}):\n"
+    )
     for metric, p in plan["metrics"].items():
         print(
             f"  {metric:<14} active {p['active']:<9} burn {p['burn_n']:>2} of {p['n_public']:>2} public "
@@ -452,6 +520,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     pr.add_argument("--metric", default=None)
     pr.add_argument("--manifest", default=DEFAULT_MANIFEST)
     pr.add_argument("--no-rotate", action="store_true", help="score all operationalizations, not just the active one")
+    pr.add_argument(
+        "--resume",
+        default=None,
+        metavar="RUN_DIR",
+        help="finish an interrupted run: keep successful completions in RUN_DIR, execute only missing/errored units "
+        "(other run options are read back from RUN_DIR/run_meta.json)",
+    )
 
     ps = sub.add_parser("score", help="completions -> per-item scores")
     ps.add_argument("--run", required=True)
@@ -478,6 +553,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     pro.add_argument("--manifest", default=DEFAULT_MANIFEST)
     pro.add_argument("--itembank", nargs="*", default=DEFAULT_ITEMBANK)
     pro.add_argument("--burn-fraction", type=float, default=0.25)
+    pro.add_argument("--seed", type=int, default=0, help="seed for the burn-sample selection (stamped in the plan)")
 
     pd = sub.add_parser("demo", help="run -> score -> validate-judge -> aggregate -> report (defaults)")
     pd.add_argument("--models", default=DEFAULT_MODELS)
@@ -492,6 +568,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.cmd == "validate":
         total = 0
         for root in args.roots:
+            if not Path(root).exists():
+                print(f"MISSING {root} (no such file or directory)")
+                total += 1
+                continue
             for path in sorted(Path(root).rglob("*.jsonl")) if Path(root).is_dir() else [Path(root)]:
                 errs = validate_file(path)
                 total += len(errs)
@@ -508,13 +588,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
 
     if args.cmd == "run":
-        do_run(args.models, args.run_config, args.itembank, args.out, args.metric, args.manifest, not args.no_rotate)
+        if args.resume:
+            do_resume(args.resume)
+        else:
+            do_run(args.models, args.run_config, args.itembank, args.out, args.metric, args.manifest, not args.no_rotate)
         return 0
     if args.cmd == "manifest":
         do_manifest(args.manifest, args.itembank)
         return 0
     if args.cmd == "rotate":
-        do_rotate_plan(args.manifest, args.itembank, args.burn_fraction)
+        do_rotate_plan(args.manifest, args.itembank, args.burn_fraction, args.seed)
         return 0
     if args.cmd == "score":
         do_score(args.run, args.itembank)

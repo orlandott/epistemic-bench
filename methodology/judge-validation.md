@@ -13,9 +13,17 @@ human-labeled sample and require it to meet a threshold.
 
 ## What is pinned
 
-- **Judge model**: pinned and versioned (`run_meta.judge.id`). It **must not
-  share a maker** with any model under test — acute given the creator-bias metric
-  (OPEN, SPEC §10: a cross-maker or ensemble judge is recommended).
+- **Judge model**: pinned and versioned in the run config's `judge` block —
+  `provider`, `model` (exact version) and `maker` are all required
+  (`config/run.example.yaml`); they are stamped into `run_meta.judge`. It
+  **must not share a maker** with any model under test — acute given the
+  creator-bias metric (OPEN, SPEC §10: an ensemble judge is a possible further
+  step). This is **enforced mechanically**: the real judge
+  (`scoring/judge/judge_client.make_real_judge`) checks the model-under-test's
+  maker against its own, case-insensitively, before every call and refuses
+  same-maker requests; those item×model groups are skipped and reported by
+  `epb score`. To judge a mixed fleet, run judged metrics per maker with a
+  different cross-maker judge each time.
 - **Rubric**: a fixed, versioned constant (`scoring/judge/rubric.py`,
   `RUBRIC_VERSION`). Changing the rubric or the judge **re-triggers the gate**.
 

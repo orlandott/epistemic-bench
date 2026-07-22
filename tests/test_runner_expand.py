@@ -82,12 +82,64 @@ class TestExpand(unittest.TestCase):
         self.assertIn("a university coalition", units["org:neutral"].prompt)
         self.assertEqual(units["org:neutral"].org_binding, {})
 
+    def test_org_token_directly_in_template_is_bound(self):
+        # str.format_map collapses "{{ORG_SELF}}" to "{ORG_SELF}", so binding must
+        # happen before formatting or a template-level token silently survives.
+        from dataclasses import replace
+
+        item = replace(_creator_bias_item(), prompt_template="{{ORG_SELF}} and {actor} proposed policy P. STANCE:")
+        model = ModelInfo("x", "mock", "Anthropic", "X")
+        cfg = RunConfig(models=[model], out_dir=Path("."), org_pool=("Anthropic", "OpenAI", "Google"), seed=1)
+        units = {u.condition_id: u for u in expand([item], cfg)}
+        self.assertIn("Anthropic and", units["org:neutral"].prompt)
+        self.assertNotIn("{ORG_SELF}", units["org:neutral"].prompt)
+        self.assertEqual(units["org:neutral"].org_binding["{{ORG_SELF}}"], "Anthropic")
+
+    def test_maker_pool_match_is_case_insensitive(self):
+        # A lowercase maker in models.yaml must not let the self org slip into the
+        # rival pool (which would null the skew being measured).
+        model = ModelInfo("x", "mock", "anthropic", "X")  # lowercase maker
+        cfg = RunConfig(
+            models=[model],
+            out_dir=Path("."),
+            org_pool=("Anthropic", "OpenAI", "Google", "Meta"),
+            seed=1,
+        )
+        units = {u.condition_id: u for u in expand([_creator_bias_item()], cfg)}
+        for rid in ("org:rival_1", "org:rival_2"):
+            rival = list(units[rid].org_binding.values())[0]
+            self.assertNotEqual(rival.lower(), "anthropic")
+
 
 class TestParseOutput(unittest.TestCase):
     def test_mcq_with_confidence(self):
         rf = ResponseFormat(type="mcq", options=("A", "B", "C", "D"), require_confidence=True)
         self.assertEqual(parse_output("ANSWER: C  CONFIDENCE: 0.73", rf), {"answer": "C", "confidence": 0.73})
         self.assertIsNone(parse_output("no answer here", rf))
+
+    def test_percent_confidence_normalized(self):
+        rf = ResponseFormat(type="mcq", options=("A", "B"), require_confidence=True)
+        self.assertEqual(parse_output("ANSWER: B  CONFIDENCE: 85%", rf), {"answer": "B", "confidence": 0.85})
+        self.assertEqual(parse_output("ANSWER: B  CONFIDENCE: 85", rf), {"answer": "B", "confidence": 0.85})
+        self.assertEqual(parse_output("ANSWER: B  CONFIDENCE: 1", rf), {"answer": "B", "confidence": 1.0})
+        # >100 is not a probability in any convention: answer parses, confidence doesn't
+        self.assertEqual(parse_output("ANSWER: B  CONFIDENCE: 850", rf), {"answer": "B"})
+
+    def test_answer_constrained_to_options(self):
+        rf = ResponseFormat(type="mcq", options=("A", "B"), require_confidence=True)
+        # prose around the keyword must not be read as an answer ("THE")
+        self.assertIsNone(parse_output("ANSWER: The answer is unclear", rf))
+        self.assertEqual(parse_output("ANSWER: b  CONFIDENCE: 0.5", rf)["answer"], "B")
+        rf_words = ResponseFormat(type="mcq", options=("YES", "NO", "UNCERTAIN"), require_confidence=True)
+        self.assertEqual(parse_output("ANSWER: UNCERTAIN CONFIDENCE: 0.4", rf_words)["answer"], "UNCERTAIN")
+        self.assertIsNone(parse_output("ANSWER: MAYBE", rf_words))
+
+    def test_stance_scale_enforced(self):
+        rf = ResponseFormat(type="stance", stance_scale=(1, 5))
+        self.assertEqual(parse_output("STANCE: 4", rf), {"stance": 4})
+        self.assertIsNone(parse_output("STANCE: 7", rf))  # out of scale -> unparseable
+        self.assertIsNone(parse_output("STANCE: -3", rf))
+        self.assertIsNone(parse_output("no stance", rf))
 
 
 if __name__ == "__main__":

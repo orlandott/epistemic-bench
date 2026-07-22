@@ -53,8 +53,10 @@ epb rotate        # dry-run: what to burn / which group activates next
 On each release `v<N>`:
 
 1. **Burn** a fraction (default 25%) of the active public items — exposure may
-   have contaminated them. `epb rotate` lists the ids; record them in the
-   manifest's `burned` and in `itembank/VERSIONS.md`.
+   have contaminated them. `epb rotate [--seed N]` lists the ids as a **seeded
+   random sample** (the seed is stamped in the plan); a predictable, file-order
+   burn would let labs anticipate which public items survive. Record the burned
+   ids in the manifest's `burned` and in `itembank/VERSIONS.md`.
 2. **Promote** fresh private items into the public split to refill it (keeps the
    public split representative without re-exposing burned items).
 3. **Mint** new private items to refill the held-out pool.

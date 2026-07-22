@@ -4,6 +4,13 @@ batch_size: 16
 temperature: 0.0
 max_tokens: 256
 
+# Transient adapter failures (timeouts, rate limits) are retried with
+# exponential backoff: retry_base_delay * 2^attempt seconds, up to max_retries.
+# Configuration errors (missing SDK / API key) are never retried. An
+# interrupted run can be finished with `epb run --resume runs/<id>`.
+max_retries: 2
+retry_base_delay: 1.0
+
 # Candidate maker names used to fill creator-bias org roles (SPEC §3.3, §4.4).
 # Unused by the calibration milestone.
 org_pool:
@@ -15,9 +22,18 @@ org_pool:
 
 # v2 judge settings (SPEC §10). A judged metric is published only if the judge
 # clears its agreement threshold against the human-labeled validation sample.
+#
+# Demo runs use the deterministic mock judge. For real runs, pin the judge here:
+# `provider` + `model` (exact version) + `maker` are all required, and the judge
+# REFUSES to score any model under test that shares its maker (self-judging
+# policy, SPEC §10) — pick a judge from a maker outside your model list, or run
+# judged metrics per-maker with different judges.
 judge:
   id: mock-judge-v1
   rubric_version: v1
+  # provider: openai            # anthropic | openai | google | openweights
+  # model: gpt-5.2-2026-05-01   # exact pinned judge version
+  # maker: OpenAI               # judge's maker, enforced against models under test
   thresholds:
     pedantic: 0.6
     thoroughness: 0.6
