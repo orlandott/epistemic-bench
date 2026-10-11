@@ -388,7 +388,7 @@ def _reliability_svg(bins: list[dict], gid: str, w: int = 300, h: int = 250) -> 
 
     sans = 'font-family="Helvetica Neue,Helvetica,Arial,sans-serif"'
     P = [
-        f'<svg viewBox="0 0 {w} {h}" width="100%" height="auto" '
+        f'<svg viewBox="0 0 {w} {h}" width="100%" '
         f'preserveAspectRatio="xMidYMid meet" role="img" '
         f'aria-label="stated confidence versus actual accuracy">'
     ]
@@ -487,8 +487,8 @@ def _reliability_svg(bins: list[dict], gid: str, w: int = 300, h: int = 250) -> 
 # Inline SVG only (no plotting deps, no JS) so the page renders offline. Each
 # virtue gets a chart that mirrors its own failure mode rather than a generic
 # score bar: bars for rates, a centred diverging bar for bias, a stacked bar for
-# the anatomy of claims, grouped bars for multi-part scores. All collapsed by
-# default, like the calibration diagrams, and expanded on click.
+# the anatomy of claims, grouped bars for multi-part scores. All open by
+# default, like the calibration diagrams, and collapsible on click.
 
 _SANS = 'font-family="Helvetica Neue,Helvetica,Arial,sans-serif"'
 # Palette mirrors the CSS :root tokens so the SVG and the page stay in step.
@@ -503,7 +503,7 @@ _STEEL, _GOLD = "#4f7299", "#caa23c"
 
 def _svg_open(w: float, h: float, label: str) -> str:
     return (
-        f'<svg viewBox="0 0 {w:.0f} {h:.0f}" width="100%" height="auto" '
+        f'<svg viewBox="0 0 {w:.0f} {h:.0f}" width="100%" '
         f'preserveAspectRatio="xMidYMid meet" role="img" aria-label="{_esc(label)}">'
     )
 
@@ -830,11 +830,11 @@ def _virtue_chart(vkey: str, entries) -> tuple[str, str]:
 
 
 def _charts_details(inner: str, summary: str) -> str:
-    """Collapsed-by-default disclosure wrapping a section's chart(s)."""
+    """Open-by-default disclosure wrapping a section's chart(s)."""
     if not inner:
         return ""
     return (
-        '<details class="charts"><summary>' + _esc(summary) + "</summary>"
+        '<details class="charts" open><summary>' + _esc(summary) + "</summary>"
         f'<div class="charts-body">{inner}</div></details>'
     )
 
@@ -855,9 +855,7 @@ def _interval_figure(entries) -> str:
     if not rows:
         return ""
     cap = (
-        "Dot = the published index (0–100); the bar is its 95% bootstrap interval. Where two "
-        "models' bars overlap, the difference between them is within noise, so the rank order "
-        "there is not reliable."
+        "Dot = the published index (0–100); the bar is its 95% bootstrap interval."
     )
     return f'<figure class="chart">{_interval_svg(rows)}<figcaption>{_esc(cap)}</figcaption></figure>'
 
@@ -942,9 +940,8 @@ def _aggregate_section(report: dict) -> str:
             f'<tr class="row{top}">'
             f"{rank_cell}"
             f'<td class="model-cell">{_esc(m["display_name"])}</td>'
-            f'<td class="maker-cell">{_esc(m.get("maker", ""))}</td>'
-            f"{cells}"
             f"{overall_cell}"
+            f"{cells}"
             "</tr>"
         )
 
@@ -964,9 +961,9 @@ def _aggregate_section(report: dict) -> str:
         "virtue above another, and an average can hide a real weakness behind otherwise strong "
         "marks, so read it as a starting point and let the detail below settle any close call.</p>"
         '<div class="tablewrap"><table class="board"><thead><tr>'
-        "<th>#</th><th>Model</th><th>Developer</th>"
-        f"{head_cells}"
+        "<th>#</th><th>Model</th>"
         "<th class='num overall-col'>Overall<br><span class='unit'>index, 0–100</span></th>"
+        f"{head_cells}"
         "</tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>"
         f"{foot}"
@@ -1389,11 +1386,12 @@ table.board{border-collapse:collapse;width:100%;font-family:var(--sans);font-siz
 .board .num{text-align:right;font-variant-numeric:tabular-nums;}
 .board tbody td{padding:14px;border-bottom:1px solid var(--rule);vertical-align:middle;}
 .board tbody tr:hover{background:var(--wash-warm);}
-.board tr.top td{background:linear-gradient(90deg,var(--wash-warm),transparent 70%);}
-.board tr.top:hover td{background:var(--wash-warm);}
+.board tr.top td{background:var(--wash-warm);}
 .board th.overall-col,.board td.overall-col{background:var(--wash-warm);
   border-left:1px solid var(--rule-strong);}
 .board tr.top td.overall-col{background:var(--ember-pale);}
+.overall .board thead th{padding:0 8px 9px;}
+.overall .board tbody td{padding:14px 8px;}
 .board tr.incomplete td{color:var(--ink-faint);}
 .board tr.incomplete .model-cell{color:var(--ink-soft);}
 .rank{font-family:var(--serif);font-weight:700;font-size:21px;color:var(--ink-faint);width:1%;}
@@ -1421,7 +1419,7 @@ details.tech table{border-collapse:collapse;width:100%;font-family:var(--sans);
 details.tech th,details.tech td{padding:9px 12px;border-bottom:1px solid var(--rule);text-align:left;}
 details.tech th{color:var(--ink-faint);text-transform:uppercase;font-size:10.5px;letter-spacing:.05em;}
 details.tech td.num,details.tech th.num{text-align:right;font-variant-numeric:tabular-nums;}
-/* collapsible charts (every virtue, collapsed by default) */
+/* collapsible charts (every virtue, open by default) */
 details.charts{margin:30px 0 0;border-top:1px solid var(--rule);padding-top:4px;}
 details.charts>summary{font-family:var(--sans);font-size:12.5px;font-weight:700;
   letter-spacing:.05em;text-transform:uppercase;color:var(--ember-deep);cursor:pointer;
