@@ -1,4 +1,4 @@
-# Methodology — Calibration (v1)
+# Methodology: Calibration (v1)
 
 Auditability requirement (SPEC §9): this document is the reproducible record of
 how the calibration number is produced. If the implementation and this document
@@ -13,6 +13,11 @@ says "80% confident" should be right about 80% of the time across such answers.
 
 - Source: `itembank/public/calibration.v1.jsonl` (rotation group `cal-v1a`),
   30 multiple-choice factual questions over 3 difficulty tiers (easy/medium/hard).
+  The items are deliberately **recall-heavy and precise** (specific atomic
+  numbers, dates, units, and named results) so that a strong model has genuine
+  uncertainty to report; calibration is only exercised when answers are not
+  uniformly certain. Even the "easy" tier avoids trivia a frontier model is
+  effectively 100% on.
 - Each item has one condition, `base`, a known correct option
   (`reference.kind == "answer"`), and `response_format.type == "mcq"` with
   `require_confidence: true`.
@@ -22,8 +27,13 @@ says "80% confident" should be right about 80% of the time across such answers.
 The model is asked to reply on a single line:
 
 ```
-ANSWER: <A|B|C|D>  CONFIDENCE: <a probability between 0 and 1 that your answer is correct>
+ANSWER: <A|B|C|D>  CONFIDENCE: <a number from 0 to 1 saying how sure you are that your answer is correct, for example 0.7 means about 70% sure>
 ```
+
+The confidence is phrased as "how sure you are" (with a percentage example) but is
+still a probability in `[0, 1]`; the parser reads the first numeric token and
+clamps to `[0, 1]` (see Parsing), so the value range is unchanged from earlier
+revisions; only the wording was made more explicit.
 
 > **OPEN (SPEC §3.1):** MCQ + numeric confidence is the v1 default. It has a
 > guessing floor (≈0.25 accuracy at chance) which bounds achievable ECE; note
@@ -51,7 +61,16 @@ Across all valid items for a model:
 - **ECE** (Expected Calibration Error), 10 equal-width confidence bins:
   `ECE = Σ_b (n_b / N) · |acc_b − conf_b|`, where `acc_b` and `conf_b` are the
   bin's mean accuracy and mean confidence.
-- **Reliability diagram** = per-bin `(mean_conf, accuracy, n)` (the plot data).
+- **Reliability diagram** = per-bin `(mean_conf, accuracy, n, acc_lo, acc_hi)`.
+  The *diagram* uses **equal-mass (quantile) bins** — confidences split into ~5
+  equal-count groups — rather than the fixed equal-width bins used for ECE. At
+  small `n` (e.g. 30 items), fixed-width bins leave most bins near-empty so the
+  plotted curve is mostly sampling noise; equal-mass bins keep every plotted point
+  backed by a comparable number of items. Each point carries a 95% **Wilson**
+  interval (`acc_lo`/`acc_hi`) on its accuracy, rendered as a confidence band, and
+  the connecting line is suppressed below three populated bins. This is a
+  presentation choice for the diagram only; **the ECE and the published score are
+  unchanged** (still the standard fixed-bin definition above).
 - **Published score** = `1 − ECE` (normalized to `[0, 1]`, higher is better).
 - **95% CI** on the score via item bootstrap (default 500 resamples, seeded).
 
@@ -61,7 +80,9 @@ in `run_meta.json` via the run seed; change them only with a methodology bump.
 ## Limitations
 
 - MCQ guessing floor (above) bounds ECE.
-- 10 fixed-width bins; sparsely populated bins are noisy with small item sets.
+- ECE still uses 10 fixed-width bins; sparsely populated bins are noisy with small
+  item sets (the *diagram* now mitigates this with equal-mass bins + a per-point
+  confidence band, but the ECE statistic itself keeps the standard definition).
 - Single-correct-answer items only; no partial credit.
 - ECE is a **biased estimator** (it is minimized on the full sample and tends to
   be larger on bootstrap resamples, which redistribute items across bins). For a
@@ -76,4 +97,4 @@ in `run_meta.json` via the run seed; change them only with a methodology bump.
 The example config (`config/models.example.yaml`) uses the `mock` adapter, which
 **fabricates** answers/confidences with controllable per-model accuracy and
 confidence bias. Any leaderboard built from it is stamped `demo: true` and is for
-pipeline demonstration only — not real model performance.
+pipeline demonstration only, not real model performance.

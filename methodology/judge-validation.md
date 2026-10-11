@@ -1,4 +1,4 @@
-# Methodology — Judge validation gate (v2)
+# Methodology: Judge validation gate (v2)
 
 This is the credibility backbone for every judge-dependent metric. **No judged
 score is published until the judge clears this gate** (SPEC §10). Auditability
@@ -14,7 +14,7 @@ human-labeled sample and require it to meet a threshold.
 ## What is pinned
 
 - **Judge model**: pinned and versioned (`run_meta.judge.id`). It **must not
-  share a maker** with any model under test — acute given the creator-bias metric
+  share a maker** with any model under test, which is acute given the creator-bias metric
   (OPEN, SPEC §10: a cross-maker or ensemble judge is recommended).
 - **Rubric**: a fixed, versioned constant (`scoring/judge/rubric.py`,
   `RUBRIC_VERSION`). Changing the rubric or the judge **re-triggers the gate**.
@@ -67,5 +67,5 @@ files are the committed source of truth.
 In demo mode the judge is a deterministic **mock** that simulates verdicts from
 per-model quality profiles; the `*.sample.jsonl` gold files ship with both human
 and (notional) judge columns so the gate computes a real κ / r. This exercises
-the gate mechanics end to end, but the judge is synthetic — `demo: true`. Real
+the gate mechanics end to end, but the judge is synthetic (`demo: true`). Real
 validation uses a real, pinned judge and genuinely human labels.

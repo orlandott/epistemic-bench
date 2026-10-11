@@ -3,7 +3,7 @@
 v1 programmatic scorers and v2 judge scorers are all registered so the pipeline
 can *compute* them. Registration is NOT publication: a judged metric
 (``pedantic``, ``thoroughness``) only appears on the leaderboard if a passing
-judge-validation record exists — the publication gate is enforced at report time
+judge-validation record exists; the publication gate is enforced at report time
 in ``aggregate.to_report`` (SPEC §10). v2 scorers additionally require a judge to
 be injected via ``ScoringContext.judge``.
 """

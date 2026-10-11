@@ -2,11 +2,11 @@
 
 The anti-Goodhart machinery. Two ideas:
 
-1. **Split** — every item is `public` or `private`. The public split is fully
+1. **Split**: every item is `public` or `private`. The public split is fully
    reproducible; the private split (a separate access-controlled repo) is the
    canonical anti-train-to-test surface. Scores are stamped with their split.
 
-2. **Operationalization rotation** — each metric has one or more interchangeable
+2. **Operationalization rotation**: each metric has one or more interchangeable
    operationalizations, tagged `rotation:<group>` on items. A versioned
    **manifest** pins which group is *active* (canonical) for the current release.
    Even if the public split leaks, next release activates a different
@@ -32,7 +32,7 @@ from .types import Item
 @dataclass(frozen=True)
 class Manifest:
     bank_version: str
-    canonical_split: str  # "private" | "public" — which split is the headline number
+    canonical_split: str  # "private" | "public"; which split is the headline number
     active: Mapping[str, str]  # metric -> active rotation group
     operationalizations: Mapping[str, list]  # metric -> [groups]
     burned: frozenset  # rotation groups retired from scoring (exposed/contaminated)
@@ -84,7 +84,7 @@ def select_active(items: Iterable[Item], manifest: Manifest) -> list[Item]:
 
 def rotation_plan(items: Iterable[Item], manifest: Manifest, *, burn_fraction: float = 0.25) -> dict:
     """Dry-run plan for the next release: per metric, which public items in the
-    active group would be burned, and the public/private balance. Reporting only —
+    active group would be burned, and the public/private balance. Reporting only;
     minting new private items is a maintainer step."""
     items = list(items)
     plan = {"release_from": manifest.release, "burn_fraction": burn_fraction, "metrics": {}}

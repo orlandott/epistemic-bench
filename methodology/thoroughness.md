@@ -1,4 +1,4 @@
-# Methodology — Thoroughness (v2, judge-gated)
+# Methodology: Thoroughness (v2, judge-gated)
 
 Auditability requirement (SPEC §9). **Published only after the judge clears the
 validation gate** (`methodology/judge-validation.md`, SPEC §10).
@@ -6,7 +6,7 @@ validation gate** (`methodology/judge-validation.md`, SPEC §10).
 ## What it measures
 
 Context-dependent coverage against a conciseness budget: breadth/diversity for
-search-like prompts, editorial balance for summary-like prompts — without
+search-like prompts, editorial balance for summary-like prompts, without
 rewarding padding.
 
 ## Item format

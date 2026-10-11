@@ -4,14 +4,14 @@ The scorer↔judge boundary is a **synchronous** ``JudgeFn``: it takes a
 ``JudgeRequest`` (rendered prompt + pinned rubric + machine-readable context) and
 returns a verdict as text (JSON), which the metric scorer parses. Keeping it sync
 and injectable (via ``ScoringContext.judge``) keeps the scorers pure and
-unit-testable — a test passes a fake judge that returns canned verdicts.
+unit-testable: a test passes a fake judge that returns canned verdicts.
 
 Two implementations:
 
-- ``make_real_judge`` — a key-gated stub. A real judge model must be pinned and
+- ``make_real_judge``: a key-gated stub. A real judge model must be pinned and
   versioned, and must not share a maker with the model under test (SPEC §10
   OPEN); wire the actual API call here.
-- ``make_mock_judge`` — deterministic synthetic verdicts for offline demos/tests,
+- ``make_mock_judge``: deterministic synthetic verdicts for offline demos/tests,
   driven by per-model quality profiles. It does NOT read the candidate text; it
   simulates a judge's verdict distribution. Any leaderboard built from it is
   stamped ``demo: true``. The mock judge is for pipeline demonstration only and

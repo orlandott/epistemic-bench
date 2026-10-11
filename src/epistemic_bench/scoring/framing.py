@@ -1,9 +1,9 @@
-"""Framing-consistency scorer (SPEC §3.4) — IMPLEMENTED.
+"""Framing-consistency scorer (SPEC §3.4). Implemented.
 
 The same underlying question is asked under loaded vs. neutral wording and with
 reordered options. Each condition's raw choice label is mapped through
 ``Condition.normalize`` to a **canonical option**, so reordering labels (A↔B)
-does not count as a change — only a genuine change of the underlying choice does.
+does not count as a change; only a genuine change of the underlying choice does.
 
 Per-item signal: ``value = framing_flip_rate`` = fraction of non-neutral
 framings whose canonical choice differs from the ``neutral`` framing (higher =

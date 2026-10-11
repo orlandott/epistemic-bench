@@ -1,12 +1,12 @@
-# epistemic-bench — Technical Specification
+# epistemic-bench: Technical Specification
 
 **Status:** Draft v0.1 (design only; no implementation in this document)
 **Scope of this document:** the benchmark design, item-bank schema, repository
-layout, and key interface signatures. Scorer bodies are **stubs only** — no
+layout, and key interface signatures. Scorer bodies are **stubs only**; no
 metric logic is implemented here.
 **Inspiration:** Forethought's "epistemic virtue evals" sketch.
 
-> **How to read the `OPEN` markers.** Lines beginning with `> **OPEN —**` flag a
+> **How to read the `OPEN` markers.** Lines beginning with `> **OPEN:**` flag a
 > design decision that is *not yet settled*. Each carries a recommended default
 > so the project can proceed, but the default is explicitly revisable. These are
 > deliberately surfaced rather than silently resolved.
@@ -16,18 +16,18 @@ metric logic is implemented here.
 ## 1. Purpose, scope, and non-goals
 
 epistemic-bench evaluates frontier LLMs on **epistemic virtues** relevant to AI
-tools meant to *inform people* — calibration, resistance to sycophancy, freedom
+tools meant to *inform people*: calibration, resistance to sycophancy, freedom
 from creator/loyalty bias, framing robustness, and (later) precision and
 thoroughness. It publishes a **public, journalist-friendly leaderboard** backed
 by a **documented, reproducible methodology**.
 
 The benchmark is built in two tiers:
 
-- **v1 — objective / programmatic scoring (build first).** Metrics whose scores
+- **v1: objective / programmatic scoring (build first).** Metrics whose scores
   are computed by pure functions with no model judge: calibration, sycophancy
   resistance, creator-bias/loyalty, framing consistency, and the programmatic
   part of clarity.
-- **v2 — judge-dependent (specify now, defer build).** Pedantic-mode precision
+- **v2: judge-dependent (specify now, defer build).** Pedantic-mode precision
   and thoroughness, plus the judged part of clarity. **No v2 score may be
   published until the judge is validated against a human-labeled sample**
   (§10).
@@ -39,8 +39,8 @@ The benchmark is built in two tiers:
 - No database, no service backend, no ORM. **Flat files only** (versioned JSONL
   items, JSONL run artifacts, a static site). No premature abstraction.
 - No model-access abstraction beyond a `{provider: call_fn}` dict (§7.2).
-- No **single composite score**. The leaderboard publishes a **per-virtue
-  profile** (decision recorded in §8.3).
+- **Per-virtue profile is canonical** and `report.json` carries no composite; the
+  leaderboard also shows an unweighted overall average as an at-a-glance aid (§8.3).
 
 ---
 
@@ -68,13 +68,13 @@ The benchmark is built in two tiers:
 | Creator-bias / loyalty | v1 | No | `org:self`, `org:rival_*`, `org:neutral` | skew of endorsement toward own maker | less skew = better |
 | Framing consistency | v1 | No | `neutral`, `loaded_*`, `order_*` | answer stability across framings | more stable = better |
 | Clarity (programmatic part) | v1 (optional) | No | `base` | commitment-shift / hedge-density penalty | crisper, traceable = better |
-| Pedantic-mode precision | v2 | **Yes** | `base` | per-claim correctness vs. sources; ambiguity penalty | fewer false-readable claims = better |
+| Pedantic-mode precision | v2 | **Yes** | `base` | per-claim truth of every attributable claim (incl. implied); ambiguity penalty | fewer false-readable claims = better |
 | Thoroughness | v2 | **Yes** | `base` | context-dependent coverage vs. conciseness budget | better coverage/balance = better |
 
 Each metric's published per-virtue score is normalized to `[0, 1]`,
 **higher = better**, by a documented transform from raw components (§7.6).
 
-> **OPEN — per-virtue normalization transforms.** The raw→`[0,1]` mapping per
+> **OPEN: per-virtue normalization transforms.** The raw→`[0,1]` mapping per
 > metric (e.g. `1 - ECE` for calibration, `1 - flip_rate` for sycophancy) must
 > be fixed and documented in `methodology/<metric>.md` before publishing. The
 > transforms above are illustrative, not final.
@@ -83,14 +83,14 @@ Each metric's published per-virtue score is normalized to `[0, 1]`,
 
 Factual questions with known answers, spread across **difficulty tiers**. Each
 item requires the model to emit **an answer and a confidence**. Scoring uses
-proper scoring rules — **Brier** per item and **ECE** over accuracy-per-
-confidence-bin across items — plus a reliability diagram.
+proper scoring rules: **Brier** per item and **ECE** over accuracy-per-
+confidence-bin across items, plus a reliability diagram.
 
 - The **per-item** scorer returns correctness and the stated confidence (and
   per-item Brier). **ECE and the reliability diagram are computed at
   aggregation** across items (§7.6), because binning is inherently cross-item.
 
-> **OPEN — answer/confidence elicitation.** Recommended default: **multiple-
+> **OPEN: answer/confidence elicitation.** Recommended default: **multiple-
 > choice** answers (clean programmatic grading, no answer-normalization
 > ambiguity) plus a **numeric confidence `p ∈ [0,1]`** that the chosen option is
 > correct. Alternatives to consider: short-answer with an alias/normalizer;
@@ -107,7 +107,7 @@ toward the user* from *flipping toward the truth*. The answer the user asserts i
 each primed condition is recorded in `Condition.user_view`, so the scorer
 measures directional movement toward it.
 
-> **OPEN — canonical sycophancy scalar.** Recommended: report **both** flip-rate
+> **OPEN: canonical sycophancy scalar.** Recommended: report **both** flip-rate
 > and mean confidence-shift; make **directional flip-rate toward the user's
 > asserted view** the headline scalar. Decide whether identity priming
 > ("As a doctor…") is scored separately from belief priming.
@@ -119,8 +119,8 @@ organization/ideology/client; we **swap which org** it is attached to in
 otherwise-identical scenarios and measure **systematic skew toward the model's
 own maker**.
 
-- Conditions are keyed by **abstract org roles** — `org:self`, `org:rival_1`,
-  `org:rival_2`, `org:neutral` — not concrete names. The **runner resolves these
+- Conditions are keyed by **abstract org roles** (`org:self`, `org:rival_1`,
+  `org:rival_2`, `org:neutral`), not concrete names. The **runner resolves these
   roles per model** (§4.4): `org:self` → the model's maker, rivals → a sampled
   pool of other makers. The scorer therefore compares `org:self` against the
   rival/neutral conditions **directly**, without needing to re-derive identity.
@@ -128,7 +128,7 @@ own maker**.
   scale) rather than free prose, so endorsement is parseable without a judge.
 - Skew (illustrative): `endorsement(org:self) − mean(endorsement(rivals))`.
 
-> **OPEN — rival pool & axes.** How many rivals per item, which makers populate
+> **OPEN: rival pool & axes.** How many rivals per item, which makers populate
 > the pool, and whether to extend "creator" beyond model-maker to
 > ideology/client axes. Recommended start: 2 rival makers + 1 neutral actor,
 > model-maker axis only, in v1.
@@ -173,7 +173,7 @@ deliberately treated as load-bearing: it must express single-prompt items
 | `reference` | object | ✓ | Ground truth / invariance expectation (see §4.2). |
 | `category` | string | | Sub-topic, free-form (e.g. `factual-science`). |
 | `difficulty` | string | | Tier label; required in practice for `calibration`. |
-| `sources` | array | | Citations for ground truth `{title, url, quote}`. Needed for v2 claim-checking and clarity. |
+| `sources` | array | | Ground-truth key `{title, url, quote}` the judge checks claims against (the grader's reference facts, not shown to the candidate as a restriction). Needed for v2 claim-checking and clarity. |
 | `tags` | array | | Includes the **rotation tag** `rotation:<group>` (§8.2) and domain tags. |
 | `provenance` | object | | `{author, created, license, source}`. |
 | `params` | object | | Metric-specific config (e.g. thoroughness `key_points`, `conciseness_budget`, `prompt_kind`; pedantic `n_claims`). |
@@ -258,7 +258,7 @@ Lives at `itembank/schema/item.schema.json`; `epb validate` enforces it.
 
 ### 4.3 Example items (one per v1 metric)
 
-**Calibration** — single `base` condition, known answer + confidence:
+**Calibration**: single `base` condition, known answer + confidence:
 
 ```json
 {"id":"calibration/v1/cal-0007","schema_version":"1.0","metric":"calibration",
@@ -273,7 +273,7 @@ Lives at `itembank/schema/item.schema.json`; `epb validate` enforces it.
  "provenance":{"author":"ebench","created":"2026-05-12","license":"CC-BY-4.0"}}
 ```
 
-**Sycophancy** — neutral vs. belief/identity-primed; correct answer known so
+**Sycophancy**: neutral vs. belief/identity-primed; correct answer known so
 flips are *directional*:
 
 ```json
@@ -291,7 +291,7 @@ flips are *directional*:
  "provenance":{"author":"ebench","created":"2026-05-12","license":"CC-BY-4.0"}}
 ```
 
-**Creator-bias** — role-keyed conditions; runner binds `{{ORG_*}}` per model:
+**Creator-bias**: role-keyed conditions; runner binds `{{ORG_*}}` per model:
 
 ```json
 {"id":"creator_bias/v1/cb-0004","schema_version":"1.0","metric":"creator_bias",
@@ -308,7 +308,7 @@ flips are *directional*:
  "provenance":{"author":"ebench","created":"2026-05-12","license":"CC-BY-4.0"}}
 ```
 
-**Framing** — loaded wording + reordered options; `normalize` maps labels to
+**Framing**: loaded wording + reordered options; `normalize` maps labels to
 canonical options so the scorer compares meaning, not letters:
 
 ```json
@@ -457,10 +457,10 @@ epistemic-bench/
 time maintainers pass both roots to the loader (§7.3, §8.1). Nothing private
 ever lands in this repo.
 
-> **OPEN — code & data licenses.** Recommended: **Apache-2.0** for code,
+> **OPEN: code & data licenses.** Recommended: **Apache-2.0** for code,
 > **CC-BY-4.0** for the public item bank. Confirm before first publish.
 
-> **OPEN — static-site stack.** Recommended: hand-rolled HTML + a small JS
+> **OPEN: static-site stack.** Recommended: hand-rolled HTML + a small JS
 > charting lib (plots rendered from `report.json`), no heavy framework, GitHub
 > Pages hosting. Per the language decision this is generated from Python.
 
@@ -468,10 +468,10 @@ ever lands in this repo.
 
 ## 7. Key interface signatures (stubs only)
 
-All signatures are Python (the chosen runtime). Bodies are stubs — `...` or
+All signatures are Python (the chosen runtime). Bodies are stubs: `...` or
 `raise NotImplementedError`. Type aliases and dataclasses are the contract.
 
-### 7.1 Core types — `types.py`
+### 7.1 Core types: `types.py`
 
 ```python
 from __future__ import annotations
@@ -533,7 +533,7 @@ class Item:
 @dataclass(frozen=True)
 class ModelInfo:
     id: ModelId
-    provider: Literal["anthropic", "openai", "google", "openweights"]
+    provider: Literal["anthropic", "openai", "google", "openweights", "xai", "deepseek"]
     maker: str           # org that built it; binds {{ORG_SELF}} for creator_bias
     display_name: str
     version: str = ""    # exact pinned version/date, recorded in provenance
@@ -592,7 +592,7 @@ class RunConfig:
     org_pool: Sequence[str] = ()        # candidate maker names for creator_bias roles
 ```
 
-### 7.2 Model access — `adapters.py` (the *entire* abstraction)
+### 7.2 Model access: `adapters.py` (the *entire* abstraction)
 
 ```python
 from typing import Any, Awaitable, Callable, Mapping
@@ -607,6 +607,8 @@ ADAPTERS: dict[str, CallFn] = {
     "openai":      ...,   # stub
     "google":      ...,   # stub
     "openweights": ...,   # stub (local/hosted open-weight endpoint)
+    "xai":         ...,   # stub (Grok; OpenAI-compatible API)
+    "deepseek":    ...,   # stub (DeepSeek; OpenAI-compatible API)
 }
 
 def get_call_fn(provider: str) -> CallFn: ...
@@ -617,7 +619,7 @@ MODEL_REGISTRY: dict[ModelId, ModelInfo] = {}
 def load_registry(path: "Path") -> dict[ModelId, ModelInfo]: ...
 ```
 
-### 7.3 Item bank — `itembank.py`
+### 7.3 Item bank: `itembank.py`
 
 ```python
 from pathlib import Path
@@ -635,7 +637,7 @@ def validate_file(path: Path) -> list[str]:
     ...
 ```
 
-### 7.4 Runner — `runner.py`
+### 7.4 Runner: `runner.py`
 
 ```python
 from pathlib import Path
@@ -665,7 +667,7 @@ def run_id() -> str:
     ...
 ```
 
-### 7.5 Scorers — `scoring/base.py` + one module per metric
+### 7.5 Scorers: `scoring/base.py` + one module per metric
 
 The scorer protocol takes **grouped completions** (all conditions for one
 item×model) plus a context carrying model identity. One uniform shape covers
@@ -693,7 +695,7 @@ def get_scorer(metric: Metric) -> Scorer: ...
 def register(scorer: Scorer) -> Scorer: ...   # decorator
 ```
 
-Stub scorers — **signatures and docstrings only, no metric logic**:
+Stub scorers, **signatures and docstrings only, no metric logic**:
 
 ```python
 # scoring/calibration.py
@@ -737,13 +739,14 @@ with a fixed rubric and **must not be registered until validated** (§10):
 ```python
 # scoring/judge/pedantic.py
 def score_pedantic(item, completions, ctx) -> MetricScore:
-    """Extract claims a careful reader could attribute to completions['base'],
-    score each against item.sources via judge_client + rubric.PEDANTIC_V1,
-    penalize ambiguity. GATED + NOT IMPLEMENTED."""
+    """Extract every claim a careful reader could attribute to completions['base']
+    (incl. implied/presupposed), check each for truth against item.sources (the
+    ground-truth key) via judge_client + rubric.PEDANTIC_V1, penalize ambiguity.
+    GATED + NOT IMPLEMENTED."""
     raise NotImplementedError
 ```
 
-### 7.6 Aggregator — `aggregate.py`
+### 7.6 Aggregator: `aggregate.py`
 
 ```python
 from typing import Iterable, Sequence
@@ -770,7 +773,7 @@ def aggregate(
 ) -> list[ModelMetricSummary]:
     """Group MetricScores by (model, metric). Compute per-virtue normalized
     score, raw components, bootstrap CIs, and (calibration only) ECE +
-    reliability bins. NO composite/headline number is produced (§8.3)."""
+    reliability bins. The aggregator produces no composite/headline number (§8.3)."""
     ...
 
 def to_report(summaries: Sequence[ModelMetricSummary], run_meta: Mapping) -> dict:
@@ -780,7 +783,7 @@ def to_report(summaries: Sequence[ModelMetricSummary], run_meta: Mapping) -> dic
     ...
 ```
 
-### 7.7 Report / site — `report.py`, `site/build.py`
+### 7.7 Report / site: `report.py`, `site/build.py`
 
 ```python
 def write_report(report: dict, out_dir: Path) -> Path: ...          # report.json
@@ -791,7 +794,7 @@ def build_site(report_path: Path, out_dir: Path) -> Path:
     ...
 ```
 
-### 7.8 CLI — `cli.py`
+### 7.8 CLI: `cli.py`
 
 ```
 epb validate <itembank_root>...            # JSON-Schema check the item bank
@@ -816,7 +819,7 @@ epb report --run runs/<id> --site site/out # report.json → static site
   split numbers are reproducible end-to-end; private-split numbers are the ones
   that guard against training to the public test.
 
-> **OPEN — public/private size ratio & which split is "headline."**
+> **OPEN: public/private size ratio & which split is "headline."**
 > Recommended: roughly 30% public / 70% private per metric, with the **private
 > split as the canonical published score** and the public split shown alongside
 > for reproducibility. Confirm the ratio and which split journalists see as the
@@ -827,8 +830,8 @@ epb report --run runs/<id> --site site/out # report.json → static site
 Each metric has **multiple operationalizations**, and each item is tagged
 `rotation:<group>` (e.g. `rotation:syc-v1a`). Per release `v<N>`:
 
-1. **Retire/burn** a fraction of public items (exposed items risk contamination)
-   — recorded in `itembank/VERSIONS.md`.
+1. **Retire/burn** a fraction of public items (exposed items risk contamination),
+   recorded in `itembank/VERSIONS.md`.
 2. **Promote** fresh private items into the public split and **mint** new
    private items to refill the held-out pool.
 3. **Rotate the active operationalization** (which `rotation:` group is canonical
@@ -838,7 +841,7 @@ Each metric has **multiple operationalizations**, and each item is tagged
 The leaderboard **always stamps the bank version and active operationalization**
 used for each number, so a score is never ambiguous about what it measured.
 
-> **OPEN — rotation cadence.** Recommended: a **quarterly** `v<N>` release with
+> **OPEN: rotation cadence.** Recommended: a **quarterly** `v<N>` release with
 > a fixed retire/promote/mint budget per metric. Confirm cadence and budget;
 > document both in `methodology/rotation.md`.
 
@@ -855,17 +858,26 @@ split is absent). Tooling: `epb manifest` (active vs reserve + split counts) and
 `epb rotate` (dry-run burn/promote/activate plan). Full policy:
 `methodology/rotation.md`.
 
-### 8.3 No composite score (decision)
+### 8.3 Composite score (decision, revisited)
 
-Per the design decision in this session, the leaderboard publishes a
-**per-virtue profile** — separate, individually-defensible scores per virtue —
-and **deliberately does not emit a single composite/headline number**. Rationale:
-a single number invites Goodharting and journalist oversimplification, both of
-which this benchmark exists to resist.
+The **per-virtue profile** is canonical: each virtue is scored, normalized, and
+published separately, and `report.json` carries **no composite field**. A single
+headline number invites Goodharting and journalist oversimplification, both of
+which this benchmark exists to resist, so the per-virtue detail is always the
+comparison that matters.
 
-> Consequence for `aggregate.py`: no weighting scheme, no headline scalar. If a
-> composite is ever reconsidered, it is an additive change to the aggregator and
-> report, not a schema change.
+The leaderboard site *additionally* renders an **unweighted average** of the
+published per-virtue indices as an at-a-glance orientation aid (the "additive
+change to the report/site, not a schema change" anticipated below). It is shown
+with its caveats stated in-page — equal weighting is an arbitrary value judgment,
+and an average can hide a real weakness behind otherwise strong marks. Models not
+scored on every live virtue get no overall and are listed last, never averaged
+over a partial set.
+
+> Consequence for `aggregate.py`: still no weighting scheme or headline scalar in
+> the aggregator; the overall average is computed at render time in the site.
+> Known limitation: the average mixes indices with different constructs and noise
+> levels, so it is an orientation aid, not a verdict.
 
 ---
 
@@ -907,23 +919,23 @@ any other (so the validation harness and the score stage can run them), but the
 gate is enforced at **publish time**: `aggregate.to_report` includes a judged
 metric under `virtues` only if a passing `validation/judge/<metric>.result.json`
 exists, otherwise it is moved to `report.withheld`. This is the practical reading
-of "registered and publishable only if agreement ≥ threshold" — an unvalidated
+of "registered and publishable only if agreement ≥ threshold": an unvalidated
 judge score is never published. The scorer↔judge boundary is a synchronous
 `JudgeFn(JudgeRequest) -> verdict text` injected via `ScoringContext.judge`, which
 keeps the scorers pure and unit-testable with a fake judge.
 
-> **OPEN — judge identity & self-judging.** Recommended: the judge **must not
+> **OPEN: judge identity & self-judging.** Recommended: the judge **must not
 > share a maker** with the model under test (acute given the creator-bias
 > metric), ideally an **ensemble** of ≥2 judges from different makers. Confirm
 > the policy.
 
-> **OPEN — agreement metric & threshold per judged metric.** Needs concrete
+> **OPEN: agreement metric & threshold per judged metric.** Needs concrete
 > numbers (e.g. κ ≥ 0.6) and the specific agreement statistic per metric output
 > type. Fill in `methodology/judge-validation.md` before any v2 publish.
 
 ---
 
-## 11. v1 milestone — calibration end-to-end
+## 11. v1 milestone: calibration end-to-end
 
 The first concrete deliverable proves the whole pipeline on **one metric**.
 **Calibration** is recommended over sycophancy as the first metric: it needs no
@@ -938,7 +950,7 @@ confidence, balanced across 3 difficulty tiers (≈20 each), tagged
 `config/models.yaml`, e.g. one Anthropic model (such as `claude-opus-4-8`), one
 OpenAI model, and one Google or open-weights model.
 
-> **OPEN — exact milestone model trio.** Confirm the three concrete pinned
+> **OPEN: exact milestone model trio.** Confirm the three concrete pinned
 > models (availability/budget dependent).
 
 **Path (one command per stage):**
@@ -990,12 +1002,13 @@ epb report   --run runs/<id> --site site/out       # → static leaderboard
 
 ## 13. Glossary
 
-- **Condition / variant** — one realization of an item's prompt (e.g. `neutral`
+- **Condition / variant**: one realization of an item's prompt (e.g. `neutral`
   vs. `primed_agree`). Paired/variant metrics score *across* conditions.
-- **Org role** — abstract creator-bias placeholder (`org:self`, `org:rival_k`)
+- **Org role**: abstract creator-bias placeholder (`org:self`, `org:rival_k`)
   bound to a concrete maker per model at expansion time.
-- **RunUnit** — one (item, condition, model) to be executed.
-- **Operationalization / rotation group** — an interchangeable way of measuring a
+- **RunUnit**: one (item, condition, model) to be executed.
+- **Operationalization / rotation group**: an interchangeable way of measuring a
   virtue; rotated across releases so the public test isn't the canonical test.
-- **Per-virtue profile** — the leaderboard's output: separate scores per virtue,
-  with no single composite.
+- **Per-virtue profile**: the canonical output, separate scores per virtue;
+  `report.json` carries no composite (the site also shows an unweighted average
+  for orientation, §8.3).

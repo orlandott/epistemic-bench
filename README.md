@@ -1,8 +1,8 @@
 # epistemic-bench
 
-An open benchmark that evaluates frontier LLMs on **epistemic virtues** —
+An open benchmark that evaluates frontier LLMs on **epistemic virtues**:
 calibration, sycophancy resistance, freedom from creator/loyalty bias, framing
-robustness, and (later) precision and thoroughness — and publishes a public,
+robustness, and (later) precision and thoroughness. It publishes a public,
 per-virtue leaderboard.
 
 Full design: **[SPEC.md](SPEC.md)**. This repo currently implements the v1
@@ -94,7 +94,7 @@ reproducible-but-not-held-out. See `methodology/rotation.md` and
 ## Evaluating real models
 
 Set a model's `provider` in `config/models.example.yaml` to `anthropic`,
-`openai`, `google`, or `openweights`, pin its `version`, then implement the real
+`openai`, `google`, `openweights`, `xai`, or `deepseek`, pin its `version`, then implement the real
 call in `src/epistemic_bench/adapters.py` (the provider SDKs are optional
 dependencies) and set the relevant API key. The `mock:` profile block is ignored
 by real providers. Real adapters never receive ground truth.
@@ -122,7 +122,7 @@ src/epistemic_bench/
   rotation.py    manifest, active-operationalization selection, rotation plan (SPEC §8)
   validation.py  judge-validation gate: Cohen's κ / Pearson r vs human sample
   report.py      report.json writer
-  site_build.py  static leaderboard (inline-SVG reliability diagrams)
+  site_build.py  static leaderboard (collapsible inline-SVG charts, one per virtue)
   cli.py         epb: validate | run | score | aggregate | report | validate-judge | manifest | rotate | demo
 config/          example models + run parameters (incl. judge thresholds)
 methodology/     reproducible per-metric methodology docs (auditability)

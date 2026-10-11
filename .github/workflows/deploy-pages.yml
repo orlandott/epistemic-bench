@@ -7,10 +7,13 @@ name: Deploy leaderboard to GitHub Pages
 # as synthetic. To publish real results later, swap the build step for a real
 # run (`epb run ... && epb score ... && epb aggregate ... && epb report ...`)
 # and add the relevant provider API keys as repository secrets.
+#
+# Requires repo Settings -> Pages -> "Build and deployment" -> Source:
+# "GitHub Actions" (one-time setup).
 
 on:
   push:
-    branches: ["claude/laughing-shannon-klxday"]
+    branches: ["main"]
   workflow_dispatch:
 
 # Least privilege needed to publish to Pages via the deploy action.

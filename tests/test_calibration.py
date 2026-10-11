@@ -2,7 +2,12 @@ import unittest
 
 import _bootstrap  # noqa: F401
 
-from epistemic_bench.aggregate import _ece_and_bins, aggregate
+from epistemic_bench.aggregate import (
+    _ece_and_bins,
+    _quantile_reliability,
+    _wilson,
+    aggregate,
+)
 from epistemic_bench.scoring.calibration import score_calibration
 from epistemic_bench.types import (
     Completion,
@@ -63,6 +68,43 @@ class TestECE(unittest.TestCase):
         top = bins[9]
         self.assertEqual(top.n, 2)
         self.assertAlmostEqual(top.accuracy, 0.5, places=9)
+
+
+class TestReliabilityDiagram(unittest.TestCase):
+    def test_quantile_bins_are_equal_mass_and_populated(self):
+        confs = [i / 30 for i in range(30)]
+        corrects = [float(i % 2) for i in range(30)]
+        rel = _quantile_reliability(confs, corrects, n_bins=5)
+        self.assertEqual(len(rel), 5)
+        self.assertEqual(sum(b.n for b in rel), 30)
+        self.assertTrue(all(b.n > 0 for b in rel))  # no empty plotted points
+        # bins are ordered by confidence and carry a valid accuracy band
+        self.assertEqual([round(b.mean_conf, 6) for b in rel],
+                         sorted(round(b.mean_conf, 6) for b in rel))
+        self.assertTrue(all(0.0 <= b.acc_lo <= b.accuracy <= b.acc_hi <= 1.0 for b in rel))
+
+    def test_fewer_bins_than_requested_when_sparse(self):
+        rel = _quantile_reliability([0.3, 0.8], [1.0, 0.0], n_bins=5)
+        self.assertEqual(len(rel), 2)  # renderer suppresses the line below 3 points
+
+    def test_wilson_stays_in_unit_interval_at_extremes(self):
+        lo, hi = _wilson(0, 5)
+        self.assertAlmostEqual(lo, 0.0)
+        self.assertLess(hi, 1.0)
+        lo, hi = _wilson(5, 5)
+        self.assertAlmostEqual(hi, 1.0)
+        self.assertGreater(lo, 0.0)
+        self.assertEqual(_wilson(0, 0), (0.0, 0.0))
+
+    def test_score_uses_fixed_bin_ece_not_quantile(self):
+        # quantile binning is display-only; the published score keeps fixed-bin ECE
+        scores = [
+            MetricScore("i1", "calibration", "m", 0.0, {"correct": 1.0, "confidence": 0.95}, valid=True),
+            MetricScore("i2", "calibration", "m", 0.9025, {"correct": 0.0, "confidence": 0.95}, valid=True),
+        ]
+        registry = {"m": ModelInfo("m", "mock", "X", "M")}
+        s = aggregate(scores, registry, seed=1, n_boot=20)[0]
+        self.assertAlmostEqual(s.raw["ece"], 0.45, places=4)  # fixed-bin definition
 
 
 class TestAggregate(unittest.TestCase):
