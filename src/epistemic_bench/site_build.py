@@ -487,8 +487,8 @@ def _reliability_svg(bins: list[dict], gid: str, w: int = 300, h: int = 250) -> 
 # Inline SVG only (no plotting deps, no JS) so the page renders offline. Each
 # virtue gets a chart that mirrors its own failure mode rather than a generic
 # score bar: bars for rates, a centred diverging bar for bias, a stacked bar for
-# the anatomy of claims, grouped bars for multi-part scores. All open by
-# default, like the calibration diagrams, and collapsible on click.
+# the anatomy of claims, grouped bars for multi-part scores. Always shown,
+# like the calibration diagrams.
 
 _SANS = 'font-family="Helvetica Neue,Helvetica,Arial,sans-serif"'
 # Palette mirrors the CSS :root tokens so the SVG and the page stay in step.
@@ -829,14 +829,11 @@ def _virtue_chart(vkey: str, entries) -> tuple[str, str]:
     return "", ""
 
 
-def _charts_details(inner: str, summary: str) -> str:
-    """Open-by-default disclosure wrapping a section's chart(s)."""
+def _charts_block(inner: str) -> str:
+    """Always-visible container for a section's chart(s)."""
     if not inner:
         return ""
-    return (
-        '<details class="charts" open><summary>' + _esc(summary) + "</summary>"
-        f'<div class="charts-body">{inner}</div></details>'
-    )
+    return f'<div class="charts">{inner}</div>'
 
 
 def _interval_figure(entries) -> str:
@@ -866,7 +863,7 @@ def _virtue_chart_block(vkey: str, entries) -> str:
         f'<figure class="chart">{svg}<figcaption>{_esc(caption)}</figcaption></figure>' if svg else ""
     )
     inner = _interval_figure(entries) + comp
-    return _charts_details(inner, "Show the charts")
+    return _charts_block(inner)
 
 
 # --- page sections -----------------------------------------------------------
@@ -1104,11 +1101,10 @@ def _calibration_section(report: dict) -> str:
         "<th>Confidence</th><th class='num'>Questions</th>"
         "</tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></div>"
-        + _charts_details(
+        + _charts_block(
             _interval_figure(entries)
             + _reliability_guide()
-            + '<div class="cards">' + "".join(cards) + "</div>",
-            "Show the charts",
+            + '<div class="cards">' + "".join(cards) + "</div>"
         )
         + f"{technical}"
         "</section>"
@@ -1419,20 +1415,10 @@ details.tech table{border-collapse:collapse;width:100%;font-family:var(--sans);
 details.tech th,details.tech td{padding:9px 12px;border-bottom:1px solid var(--rule);text-align:left;}
 details.tech th{color:var(--ink-faint);text-transform:uppercase;font-size:10.5px;letter-spacing:.05em;}
 details.tech td.num,details.tech th.num{text-align:right;font-variant-numeric:tabular-nums;}
-/* collapsible charts (every virtue, open by default) */
-details.charts{margin:30px 0 0;border-top:1px solid var(--rule);padding-top:4px;}
-details.charts>summary{font-family:var(--sans);font-size:12.5px;font-weight:700;
-  letter-spacing:.05em;text-transform:uppercase;color:var(--ember-deep);cursor:pointer;
-  list-style:none;display:flex;align-items:center;gap:9px;padding:10px 0;}
-details.charts>summary::-webkit-details-marker{display:none;}
-details.charts>summary::before{content:"";flex:none;width:0;height:0;
-  border-left:6px solid var(--ember);border-top:5px solid transparent;
-  border-bottom:5px solid transparent;transition:transform .15s ease;}
-details.charts[open]>summary::before{transform:rotate(90deg);}
-details.charts>summary:hover{color:var(--ember);}
-.charts-body{margin:6px 0 4px;}
-.charts-body .cards{margin-top:14px;}
-.charts-body .chart-guide{margin-top:6px;}
+/* charts (every virtue, always shown) */
+.charts{margin:30px 0 4px;}
+.charts .cards{margin-top:14px;}
+.charts .chart-guide{margin-top:6px;}
 figure.chart{margin:6px 0 0;}
 figure.chart svg{display:block;width:100%;height:auto;}
 figure.chart figcaption{font-family:var(--sans);font-size:12px;line-height:1.55;

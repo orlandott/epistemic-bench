@@ -8,7 +8,7 @@ matter how the charts are styled:
 
 * the emitted HTML is tag-balanced (open/close nesting is well formed);
 * every live (scored) virtue renders exactly one leaderboard and exactly one
-  (open) charts panel, and calibration renders exactly one reliability
+  charts panel, and calibration renders exactly one reliability
   diagram per scored model;
 * demo runs are stamped with the "not real results" banner (and only those);
 * the technical-detail panels are collapsed by default;
@@ -237,12 +237,12 @@ class TestTagBalance(unittest.TestCase):
 class TestOneChartPerLiveVirtue(unittest.TestCase):
     def test_one_charts_panel_per_live_virtue(self):
         # Every live virtue (calibration included) wraps its visualisation in
-        # exactly one open <details class="charts"> disclosure.
+        # exactly one always-visible <div class="charts"> block.
         report = make_report()
         html = _build(report)
         live = _live_virtue_keys(report)
         self.assertEqual(len(live), 4)  # calibration, sycophancy, creator_bias, thoroughness
-        self.assertEqual(html.count('class="charts" open'), len(live))
+        self.assertEqual(html.count('<div class="charts">'), len(live))
 
     def test_one_leaderboard_per_live_virtue_plus_overall(self):
         report = make_report()
@@ -313,8 +313,7 @@ class TestCollapsedByDefault(unittest.TestCase):
         import re
 
         html = _build(make_report())
-        # Charts panels are open by default; every other panel starts collapsed.
-        opens = [t for t in re.findall(r"<details\b[^>]*>", html) if 'class="charts"' not in t]
+        opens = re.findall(r"<details\b[^>]*>", html)
         self.assertTrue(opens, "expected technical <details> panels")
         # A <details> is collapsed unless it carries the boolean `open` attribute.
         self.assertFalse(
